@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#050816">
+  <title>NEON Chat — Gruppenchat</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="orb orb-a"></div><div class="orb orb-b"></div>
+
+  <main id="home" class="screen">
+    <section class="card hero">
+      <div class="logo">✦</div>
+      <div class="eyebrow">DEIN SPACE · DEINE CREW</div>
+      <h1>NEON <span>CHAT</span></h1>
+      <p class="muted intro">Ein Raum für alle. Alle können schreiben — auch wenn du offline bist.</p>
+
+      <label for="nameInput">DEIN NAME</label>
+      <input id="nameInput" maxlength="24" placeholder="Wie sollen dich Freunde sehen?" autocomplete="nickname">
+
+      <div class="actions">
+        <button id="createBtn" class="primary">＋ Raum erstellen</button>
+        <button id="showJoinBtn" class="secondary">Raum beitreten ↗</button>
+      </div>
+
+      <div id="joinBox" class="panel hidden">
+        <label for="codeInput">RAUM-CODE</label>
+        <input id="codeInput" maxlength="8" placeholder="ABCD2345" autocomplete="off">
+        <button id="joinBtn" class="primary full">Jetzt beitreten</button>
+      </div>
+
+      <div id="createdBox" class="panel hidden">
+        <div class="eyebrow">DEIN EINLADUNGSCODE</div>
+        <div id="createdCode" class="room-code">--------</div>
+        <p class="muted small">Teile den Link mit deiner Crew. Der Raum bleibt bestehen, auch wenn du gehst.</p>
+        <div class="actions">
+          <button id="copyBtn" class="secondary">⧉ Link kopieren</button>
+          <button id="mailBtn" class="secondary">✉ Outlook</button>
+        </div>
+        <button id="enterBtn" class="primary full">Chat öffnen →</button>
+      </div>
+
+      <p id="homeError" class="error" role="alert"></p>
+      <p class="footnote">💾 Nachrichten werden gespeichert, damit sie später wieder da sind.</p>
+    </section>
+  </main>
+
+  <main id="chatScreen" class="chat-screen hidden">
+    <section class="chat-shell">
+      <aside class="sidebar">
+        <div class="brand-row">
+          <div class="mini-logo">✦</div>
+          <div><b>NEON CHAT</b><div class="eyebrow">GROUP SPACE</div></div>
+        </div>
+
+        <div class="room-card">
+          <div class="eyebrow">DEIN RAUM</div>
+          <div id="roomCodeLabel" class="room-label">--------</div>
+          <button id="copyChatLinkBtn" class="secondary full">⧉ Einladung teilen</button>
+        </div>
+
+        <div class="user-line"><span class="status-dot"></span><span>Du bist <b id="myName"></b></span></div>
+        <div class="people-heading">ONLINE <span id="onlineCount">0</span></div>
+        <div id="userList" class="user-list"></div>
+        <div class="sidebar-bottom"><span class="status-dot"></span> Der Raum bleibt bestehen, wenn du gehst.</div>
+      </aside>
+
+      <section class="conversation">
+        <header class="chat-header">
+          <div class="header-icon">◎</div>
+          <div><h2>Der Gruppenchat</h2><p class="muted">Eine Nachricht erreicht alle im Raum.</p></div>
+          <div class="live-pill"><span class="status-dot"></span> LIVE</div>
+        </header>
+
+        <div id="messages" class="messages">
+          <div class="empty"><div class="empty-icon">✦</div><h3>Willkommen in deinem Space</h3><p>Schreib die erste Nachricht oder lade deine Freunde ein.</p></div>
+        </div>
+        <div id="notice" class="notice hidden" role="status"></div>
+
+        <form id="messageForm" class="composer">
+          <input id="messageInput" maxlength="2000" placeholder="Schreib eine Nachricht an alle …" autocomplete="off" disabled>
+          <button id="sendBtn" class="send-button" aria-label="Nachricht senden" disabled>➤</button>
+        </form>
+        <div class="composer-hint">ENTER ZUM SENDEN <span>·</span> MAX. 2000 ZEICHEN</div>
+      </section>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "neon-gruppenchat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Futuristischer Gruppenchat mit Raum-Code und gespeicherten Nachrichten",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "socket.io": "^4.8.1"
+  }
+}
