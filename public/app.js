@@ -295,3 +295,68 @@ if (inviteCode) {
   $("joinBox").classList.remove("hidden");
   $("codeInput").value = inviteCode.toUpperCase().slice(0, 8);
 }
+
+const adminLogin = $("adminLogin");
+const adminPanel = $("adminPanel");
+const adminForm = $("adminLoginForm");
+const adminError = $("adminError");
+
+async function checkAdminStatus() {
+  try {
+    const response = await fetch("/api/admin/status");
+    const result = await response.json();
+
+    if (result.authenticated) {
+      adminLogin.classList.add("hidden");
+      adminPanel.classList.remove("hidden");
+    } else {
+      adminPanel.classList.add("hidden");
+      adminLogin.classList.remove("hidden");
+    }
+  } catch {
+    adminError.textContent = "Verbindung zum Server fehlgeschlagen.";
+  }
+}
+
+if (new URLSearchParams(location.search).get("admin") === "1") {
+  adminLogin.classList.remove("hidden");
+  checkAdminStatus();
+}
+
+adminForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  adminError.textContent = "";
+
+  const password = $("adminPassword").value;
+
+  try {
+    const response = await fetch("/api/admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      adminError.textContent = result.error || "Anmeldung fehlgeschlagen.";
+      return;
+    }
+
+    $("adminPassword").value = "";
+    await checkAdminStatus();
+  } catch {
+    adminError.textContent = "Server nicht erreichbar.";
+  }
+});
+
+$("adminLogout").addEventListener("click", async () => {
+  try {
+    await fetch("/api/admin/logout", { method: "POST" });
+    adminPanel.classList.add("hidden");
+    adminLogin.classList.remove("hidden");
+    adminError.textContent = "Du wurdest abgemeldet.";
+  } catch {
+    adminError.textContent = "Abmeldung fehlgeschlagen.";
+  }
+});
