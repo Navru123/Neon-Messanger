@@ -58,6 +58,77 @@ app.use("/api", rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 }));
+
+function createAdminSignature(token) {
+  return crypto
+    .createHmac("sha256", process.env.ADMIN_PASSWORD)
+    .update(token)
+    .digest("hex");
+}
+
+function isAdmin(req) {
+  const cookie = req.headers.cookie || "";
+  const match = cookie.match(/(?:^|;\s*)neon_admin=([^;]+)/);
+  if (!match || !process.env.ADMIN_PASSWORD) return false;
+
+  try {
+    const parts = decodeURIComponent(match[1]).split(".");
+    const signature = parts.pop();
+    const token = parts.join(".");
+    const timestamp = Number(token.split(".")[0]);
+
+    if (!signature || !token || !Number.isFinite(timestamp)) return false;
+    if (Date.now() - timestamp > 8 * 60 * 60 * 1000) return false;
+    if (timestamp > Date.now()) return false;
+
+    const expected = createAdminSignature(token);
+    const actualBuffer = Buffer.from(signature, "hex");
+    const expectedBuffer = Buffer.from(expected, "hex");
+
+    return actualBuffer.length === expectedBuffer.length &&
+      crypto.timingSafeEqual(actualBuffer, expectedBuffer);
+  } catch {
+    return false;
+  }
+}
+
+app.post("/api/admin/login", (req, res) => {
+  const configuredPassword = process.env.ADMIN_PASSWORD;
+  if (!configuredPassword) {
+    return res.status(503).json({ error: "Admin-Passwort ist nicht konfiguriert." });
+  }
+
+  const suppliedPassword = String(req.body?.password || "");
+  const suppliedHash = crypto.createHash("sha256").update(suppliedPassword).digest();
+  const configuredHash = crypto.createHash("sha256").update(configuredPassword).digest();
+
+  if (!crypto.timingSafeEqual(suppliedHash, configuredHash)) {
+    return res.status(401).json({ error: "Passwort falsch." });
+  }
+
+  const token = `${Date.now()}.${crypto.randomBytes(32).toString("hex")}`;
+  const signature = createAdminSignature(token);
+
+  res.setHeader(
+    "Set-Cookie",
+    `neon_admin=${encodeURIComponent(`${token}.${signature}`)}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=28800`
+  );
+
+  res.json({ ok: true });
+});
+
+app.get("/api/admin/status", (req, res) => {
+  res.json({ authenticated: isAdmin(req) });
+});
+
+app.post("/api/admin/logout", (req, res) => {
+  res.setHeader(
+    "Set-Cookie",
+    "neon_admin=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0"
+  );
+  res.json({ ok: true });
+});
+
 app.use(express.static(path.join(__dirname, "public")));
 
 const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
