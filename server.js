@@ -392,6 +392,17 @@ app.post("/api/conversations/:id/upload", requireAuth, (req,res) => {
     if (!req.file) return res.status(400).json({ error:"Bitte wähle eine erlaubte Datei aus." });
     const attachmentId=id(), now=Date.now(), body=clean(req.body?.message,2000);
     try {
+      const head=Buffer.alloc(16),fd=fs.openSync(req.file.path,"r");const n=fs.readSync(fd,head,0,16,0);fs.closeSync(fd);
+      const b=head.subarray(0,n);
+      const valid=(req.file.mimetype==="image/jpeg"&&b[0]===255&&b[1]===216&&b[2]===255)
+        ||(req.file.mimetype==="image/png"&&b.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))
+        ||(req.file.mimetype==="image/gif"&&/^GIF8[79]a$/.test(b.toString("ascii",0,6)))
+        ||(req.file.mimetype==="image/webp"&&b.toString("ascii",0,4)==="RIFF"&&b.toString("ascii",8,12)==="WEBP")
+        ||(req.file.mimetype==="application/pdf"&&b.toString("ascii",0,5)==="%PDF-")
+        ||(req.file.mimetype==="text/plain"&&!b.includes(0));
+      if(!valid){fs.unlink(req.file.path,()=>{});return res.status(400).json({error:"Der Dateiinhalt passt nicht zum angegebenen Dateityp."});}
+    } catch {fs.unlink(req.file.path,()=>{});return res.status(400).json({error:"Die Datei konnte nicht geprüft werden."});}
+    try {
       db.prepare("INSERT INTO attachments(id,owner_id,conversation_id,original_name,stored_name,mime_type,size,created_at) VALUES(?,?,?,?,?,?,?,?)")
         .run(attachmentId,req.user.id,conversationId,clean(path.basename(req.file.originalname),140)||"Datei",req.file.filename,req.file.mimetype,req.file.size,now);
       const messageId=id();
