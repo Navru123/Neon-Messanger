@@ -465,8 +465,8 @@ window.addEventListener("resize",()=>{if(!state.activeConversation&&!$("welcomeV
 async function boot() {
   setAuthMode("login");
   const params=new URLSearchParams(location.search);
-  if(params.has("verify")){showAccountAction("verify");state.accountToken=params.get("verify");}
-  else if(params.has("reset")){showAccountAction("reset");state.accountToken=params.get("reset");}
+  if(params.has("verify")){showAccountAction("verify");state.accountToken=params.get("verify");return;}
+  else if(params.has("reset")){showAccountAction("reset");state.accountToken=params.get("reset");return;}
   // Registration needs a separate username field; keep it visible only in registration mode.
   $("registerTab").addEventListener("click",()=>{const field=$("usernameRegisterField");if(field)field.classList.remove("hidden");});
   try{const result=await api("/api/auth/me");state.user=result.user;enterMessenger();await refreshConversations();maybeJoinInviteRoom();}
