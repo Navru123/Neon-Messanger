@@ -108,7 +108,7 @@ const upload = multer({
     destination: (_req, _file, cb) => cb(null, uploadDir),
     filename: (_req, _file, cb) => cb(null, crypto.randomUUID())
   }),
-  limits: { fileSize: 8 * 1024 * 1024, files: 1 },
+  limits: { fileSize: 8 * 1024 * 1024, files: 1, fields: 1, fieldNestingDepth: 2 },
   fileFilter: (_req, file, cb) => cb(null, allowedMimes.has(file.mimetype))
 });
 
@@ -303,7 +303,7 @@ app.patch("/api/profile", requireAuth, (req,res) => {
   res.json({ user: publicUser(db.prepare("SELECT * FROM users WHERE id=?").get(req.user.id)) });
 });
 app.post("/api/profile/avatar", requireAuth, (req,res) => {
-  const avatarUpload=multer({storage:multer.diskStorage({destination:(_req,_file,cb)=>cb(null,uploadDir),filename:(_req,_file,cb)=>cb(null,"avatar-"+crypto.randomUUID())}),limits:{fileSize:2*1024*1024,files:1},fileFilter:(_req,file,cb)=>cb(null,avatarMimes.has(file.mimetype))}).single("avatar");
+  const avatarUpload=multer({storage:multer.diskStorage({destination:(_req,_file,cb)=>cb(null,uploadDir),filename:(_req,_file,cb)=>cb(null,"avatar-"+crypto.randomUUID())}),limits:{fileSize:2*1024*1024,files:1,fields:0,fieldNestingDepth:1},fileFilter:(_req,file,cb)=>cb(null,avatarMimes.has(file.mimetype))}).single("avatar");
   avatarUpload(req,res,err=>{
     if(err)return res.status(400).json({error:err.code==="LIMIT_FILE_SIZE"?"Avatar darf höchstens 2 MB groß sein.":"Erlaubt sind JPEG, PNG und WebP."});
     if(!req.file)return res.status(400).json({error:"Bitte wähle ein JPEG-, PNG- oder WebP-Bild aus."});
