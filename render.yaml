@@ -1,18 +1,22 @@
 services:
   - type: web
-    name: neon-gruppenchat
+    name: neon-messenger
     runtime: node
     plan: starter
     region: frankfurt
     buildCommand: npm install
     startCommand: npm start
-    healthCheckPath: /
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
       - key: DB_PATH
         value: /var/data/chat.db
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false
     disk:
-      name: neon-chat-data
+      name: neon-messenger-data
       mountPath: /var/data
       sizeGB: 1
