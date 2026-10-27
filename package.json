@@ -6,7 +6,7 @@
   "engines": { "node": ">=20" },
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check public/app.js"
+    "check": "node --check server.js && node --check public/app.js && node --check scripts/integration-smoke.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
