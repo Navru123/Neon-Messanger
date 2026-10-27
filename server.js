@@ -75,7 +75,7 @@ app.disable("x-powered-by");
 app.set("trust proxy", process.env.TRUST_PROXY === "1" ? 1 : false);
 app.use(helmet({
   contentSecurityPolicy: { directives: {
-    defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'"],
+    defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'"], styleSrcAttr: ["'unsafe-inline'"],
     imgSrc: ["'self'", "data:", "blob:"], connectSrc: ["'self'", "ws:", "wss:"],
     fontSrc: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"],
     formAction: ["'self'"], baseUri: ["'self'"]
