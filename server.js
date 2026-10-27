@@ -407,20 +407,29 @@ io.on("connection",socket=>{
     socket.join("conversation:"+conversationId);
   });
   socket.on("chat-message",({conversationId,text}={})=>{
-    const userId=socket.data.userId;
-    conversationId=clean(conversationId,64);
     const body=cleanText(text);
-    if (!userId || !body || !isMember(conversationId,userId)) return;
     const now=Date.now();
     socket.data.recentMessageTimes=socket.data.recentMessageTimes.filter(t=>now-t<10000);
     if (socket.data.recentMessageTimes.length>=12) { socket.emit("chat-warning","Du sendest sehr schnell. Warte kurz."); return; }
+    if (conversationId) {
+      const userId=socket.data.userId;
+      conversationId=clean(conversationId,64);
+      if (!userId || !body || !isMember(conversationId,userId)) return;
+      socket.data.recentMessageTimes.push(now);
+      const messageId=id();
+      db.prepare("INSERT INTO chat_messages(id,conversation_id,sender_id,body,created_at) VALUES(?,?,?,?,?)").run(messageId,conversationId,userId,body,now);
+      const sender=db.prepare("SELECT id,username,display_name AS displayName,avatar_color AS avatarColor FROM users WHERE id=?").get(userId);
+      emitConversation(conversationId,"new-chat-message",{conversationId,message:{id:messageId,body,time:now,senderId:userId,sender}});
+      const summaryIds=db.prepare("SELECT user_id FROM conversation_members WHERE conversation_id=?").all(conversationId);
+      for (const member of summaryIds) io.to("user:"+member.user_id).emit("conversation-activity",{conversationId,time:now,body,sender:sender.username});
+      return;
+    }
+    // Backwards compatibility: legacy room-code chats continue to work for older clients.
+    const code=socket.data.roomCode,name=socket.data.name,clientId=socket.data.clientId;
+    if(!code||!name||!clientId||!body)return;
     socket.data.recentMessageTimes.push(now);
-    const messageId=id();
-    db.prepare("INSERT INTO chat_messages(id,conversation_id,sender_id,body,created_at) VALUES(?,?,?,?,?)").run(messageId,conversationId,userId,body,now);
-    const sender=db.prepare("SELECT id,username,display_name AS displayName,avatar_color AS avatarColor FROM users WHERE id=?").get(userId);
-    emitConversation(conversationId,"new-chat-message",{conversationId,message:{id:messageId,body,time:now,senderId:userId,sender}});
-    const summaryIds=db.prepare("SELECT user_id FROM conversation_members WHERE conversation_id=?").all(conversationId);
-    for (const member of summaryIds) io.to("user:"+member.user_id).emit("conversation-activity",{conversationId,time:now,body,sender:sender.username});
+    const result=db.prepare("INSERT INTO messages(room_code,sender_name,sender_client_id,message_text,created_at) VALUES(?,?,?,?,?)").run(code,name,clientId,body,now);
+    io.to(code).emit("new-message",{id:Number(result.lastInsertRowid),name,clientId,text:body,time:now});
   });
   socket.on("join-room",({code,name,clientId}={})=>{
     if(socket.data.roomCode){socket.emit("join-error","Du bist bereits in einem Raum. Lade die Seite neu, um zu wechseln.");return;}
