@@ -79,7 +79,7 @@ if (!userColumns.has("avatar_url")) db.exec("ALTER TABLE users ADD COLUMN avatar
 if (!userColumns.has("email_verified")) db.exec("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1");
 
 app.disable("x-powered-by");
-app.set("trust proxy", process.env.TRUST_PROXY === "1" ? 1 : false);
+app.set("trust proxy", process.env.NODE_ENV === "production" ? 1 : false);
 app.use(helmet({
   contentSecurityPolicy: { directives: {
     defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'"], styleSrcAttr: ["'unsafe-inline'"],
