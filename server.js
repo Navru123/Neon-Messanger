@@ -7,6 +7,7 @@ const { promisify } = require("util");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const multer = require("multer");
+const nodemailer = require("nodemailer");
 const Database = require("better-sqlite3");
 const { Server } = require("socket.io");
 
@@ -35,6 +36,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, username TEXT NOT NULL UNIQUE,
     display_name TEXT NOT NULL, password_hash TEXT NOT NULL, avatar_color TEXT NOT NULL,
+    avatar_url TEXT, email_verified INTEGER NOT NULL DEFAULT 1,
     role TEXT NOT NULL DEFAULT 'user', banned INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL
   );
@@ -57,6 +59,7 @@ db.exec(`
     attachment_id TEXT, created_at INTEGER NOT NULL, deleted_at INTEGER
   );
   CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages(conversation_id,created_at);
+  CREATE TABLE IF NOT EXISTS account_tokens (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, kind TEXT NOT NULL CHECK(kind IN ('verify','reset')), token_hash TEXT NOT NULL UNIQUE, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS attachments (
     id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id),
     conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
@@ -70,6 +73,10 @@ db.exec(`
     reviewed_by TEXT REFERENCES users(id), reviewed_at INTEGER
   );
 `);
+
+const userColumns = new Set(db.prepare("PRAGMA table_info(users)").all().map(column => column.name));
+if (!userColumns.has("avatar_url")) db.exec("ALTER TABLE users ADD COLUMN avatar_url TEXT");
+if (!userColumns.has("email_verified")) db.exec("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1");
 
 app.disable("x-powered-by");
 app.set("trust proxy", process.env.TRUST_PROXY === "1" ? 1 : false);
@@ -93,6 +100,9 @@ if (process.env.NODE_ENV === "production" && COOKIE_SECRET.length < 32) {
 }
 const sessionSecret = COOKIE_SECRET.length >= 32 ? COOKIE_SECRET : crypto.randomBytes(48).toString("hex");
 const allowedMimes = new Set(["image/jpeg","image/png","image/gif","image/webp","application/pdf","text/plain"]);
+const avatarMimes = new Set(["image/jpeg","image/png","image/webp"]);
+const SMTP_READY = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS && process.env.SMTP_FROM);
+const mailer = SMTP_READY ? nodemailer.createTransport({host:process.env.SMTP_HOST,port:Number(process.env.SMTP_PORT||587),secure:String(process.env.SMTP_SECURE||"false")==="true",auth:{user:process.env.SMTP_USER,pass:process.env.SMTP_PASS}}) : null;
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, uploadDir),
@@ -154,7 +164,32 @@ function clearSession(req, res) {
 }
 function publicUser(row) {
   return { id: row.id, username: row.username, displayName: row.display_name || row.displayName,
-    avatarColor: row.avatar_color || row.avatarColor, role: row.role || "user" };
+    avatarColor: row.avatar_color || row.avatarColor, avatarUrl: row.avatar_url || row.avatarUrl || null, role: row.role || "user" };
+}
+function tokenHash(token) { return crypto.createHash("sha256").update(token).digest("hex"); }
+function publicBaseUrl(req) {
+  const configured = String(process.env.PUBLIC_URL || "").trim().replace(/\/$/, "");
+  if (configured) return configured;
+  if (process.env.NODE_ENV === "production") throw new Error("PUBLIC_URL muss in Produktion gesetzt sein.");
+  return req.protocol + "://" + req.get("host");
+}
+async function createAccountToken(userId, kind, req) {
+  if (!mailer && process.env.NODE_ENV === "production") throw new Error("SMTP nicht konfiguriert.");
+  const token=crypto.randomBytes(32).toString("base64url"), now=Date.now();
+  const ttl=kind==="verify" ? 24*60*60*1000 : 60*60*1000;
+  db.prepare("DELETE FROM account_tokens WHERE user_id=? AND kind=?").run(userId,kind);
+  db.prepare("INSERT INTO account_tokens(id,user_id,kind,token_hash,expires_at,created_at) VALUES(?,?,?,?,?,?)").run(id(),userId,kind,tokenHash(token),now+ttl,now);
+  const url=publicBaseUrl(req)+(kind==="verify" ? "/?verify=" : "/?reset=")+encodeURIComponent(token);
+  const label=kind==="verify" ? "E-Mail-Adresse bestätigen" : "Passwort zurücksetzen";
+  const email=db.prepare("SELECT email FROM users WHERE id=?").get(userId).email;
+  if (mailer) {
+    try { await mailer.sendMail({from:process.env.SMTP_FROM,to:email,subject:"NEON Messenger – "+label,text:label+": "+url,html:'<p>'+label+'</p><p><a href="'+url+'">'+label+'</a></p><p>Der Link läuft in '+(kind==="verify"?"24 Stunden.":"1 Stunde.")+'</p>'}); }
+    catch(error) { db.prepare("DELETE FROM account_tokens WHERE user_id=? AND kind=?").run(userId,kind); throw error; }
+  } else {
+    console.warn("Entwicklungslink ("+kind+"): "+url);
+    return url;
+  }
+  return null;
 }
 function isMember(conversationId, userId) {
   return !!db.prepare("SELECT 1 FROM conversation_members WHERE conversation_id=? AND user_id=?").get(conversationId,userId);
