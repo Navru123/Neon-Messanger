@@ -277,7 +277,7 @@ app.post("/api/auth/resend-verification", async (req,res) => {
 });
 app.post("/api/auth/forgot-password", async (req,res) => {
   const email=emailClean(req.body?.email);
-  if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))return res.status(400).json({error:"Bitte gib eine gültige E-Mail-Adresse ein."});
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return res.status(400).json({error:"Bitte gib eine gültige E-Mail-Adresse ein."});
   const user=db.prepare("SELECT id FROM users WHERE email=? AND email_verified=1 AND banned=0").get(email);
   if(user){try{const url=await createAccountToken(user.id,"reset",req);return res.json({ok:true,message:"Falls ein bestätigtes Konto zu dieser E-Mail gehört, wurde ein Link versendet.",...(url?{developmentResetUrl:url}:{})});}catch(error){console.error("Reset email:",error.message);return res.status(503).json({error:"E-Mail-Versand nicht verfügbar."});}}
   res.json({ok:true,message:"Falls ein bestätigtes Konto zu dieser E-Mail gehört, wurde ein Link versendet."});
