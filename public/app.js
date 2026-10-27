@@ -3,7 +3,7 @@ const state = {
   user: null, socket: null, conversations: [], activeConversation: null,
   messages: [], users: [], selectedUsers: new Set(), groupMode: false,
   filter: "all", selectedColor: "#8b7cff", lastMessageId: null, toastTimer: null,
-  roomCode: "", roomMessages: [], roomUsers: []
+  roomCode: "", roomMessages: [], roomUsers: [], accountAction: null, accountToken: null
 };
 const COLORS = ["#8b7cff","#48c6ef","#f59eae","#55d6a7","#f3b562","#fb7185","#60a5fa"];
 const views = ["welcomeView","chatView","peopleView","profileView","adminView"];
@@ -21,7 +21,8 @@ function shortTime(time) {
 function avatarMarkup(user, extra = "") {
   const name = user?.displayName || user?.display_name || user?.username || "?";
   const color = COLORS.includes(user?.avatarColor || user?.avatar_color) ? (user.avatarColor || user.avatar_color) : "#8b7cff";
-  return '<div class="avatar '+extra+'" style="--avatar-color:'+color+'">'+escapeHtml(name.slice(0,1).toUpperCase())+'</div>';
+  const avatarUrl=user?.avatarUrl||user?.avatar_url;
+  return '<div class="avatar '+extra+'" style="--avatar-color:'+color+'">'+(avatarUrl?'<img src="'+escapeHtml(avatarUrl)+'" alt="" loading="lazy">':escapeHtml(name.slice(0,1).toUpperCase()))+'</div>';
 }
 function showToast(message) {
   const toast = $("toast"); toast.textContent = message; toast.classList.remove("hidden");
@@ -75,8 +76,9 @@ async function onAuthSubmit(event) {
       if (payload.displayName.length < 2) throw new Error("Dein Anzeigename muss mindestens 2 Zeichen lang sein.");
     }
     const result = await api(register ? "/api/auth/register" : "/api/auth/login",{method:"POST",body:JSON.stringify(payload)});
+    if(register && result.pendingVerification){showError("authError",result.message);if(result.developmentVerificationUrl){showError("authError",result.message+" Entwicklungslink: "+result.developmentVerificationUrl);} $("resendVerificationBtn").classList.remove("hidden");return;}
     state.user = result.user; enterMessenger(); await refreshConversations(); maybeJoinInviteRoom();
-  } catch (error) { showError("authError",error.message); }
+  } catch (error) { showError("authError",error.message); if(error.message.toLowerCase().includes("bestätige zuerst")) $("resendVerificationBtn").classList.remove("hidden"); }
   finally { button.disabled = false; }
 }
 function enterMessenger() {
@@ -125,11 +127,11 @@ function renderUserProfile() {
   const user=state.user;if(!user)return;
   $("footerName").textContent=user.displayName||user.username;
   $("footerHandle").textContent="@"+user.username;
-  $("footerAvatar").textContent=(user.displayName||user.username||"N").slice(0,1).toUpperCase();
+  $("footerAvatar").innerHTML=user.avatarUrl?'<img src="'+escapeHtml(user.avatarUrl)+'" alt="">':escapeHtml((user.displayName||user.username||"N").slice(0,1).toUpperCase());
   $("footerAvatar").style.setProperty("--avatar-color",user.avatarColor||"#8b7cff");
-  $("railAvatar").textContent=(user.displayName||user.username||"N").slice(0,1).toUpperCase();
+  $("railAvatar").innerHTML=user.avatarUrl?'<img src="'+escapeHtml(user.avatarUrl)+'" alt="">':escapeHtml((user.displayName||user.username||"N").slice(0,1).toUpperCase());
   $("railAvatar").style.setProperty("--avatar-color",user.avatarColor||"#8b7cff");
-  $("profileAvatar").textContent=(user.displayName||user.username||"N").slice(0,1).toUpperCase();
+  $("profileAvatar").innerHTML=user.avatarUrl?'<img src="'+escapeHtml(user.avatarUrl)+'" alt="">':escapeHtml((user.displayName||user.username||"N").slice(0,1).toUpperCase());
   $("profileAvatar").style.setProperty("--avatar-color",user.avatarColor||"#8b7cff");
   $("profileUsername").textContent="@"+user.username;$("profileEmail").textContent=user.email||"Dein NEON-Konto";
   $("displayName").value=user.displayName||user.username;
@@ -323,6 +325,37 @@ function sendLegacyRoomMessage(event){
   if(!text||!state.roomCode||!state.socket?.connected){showToast("Du bist gerade nicht verbunden.");return;}
   state.socket.emit("chat-message",{text});input.value="";
 }
+function showAccountAction(mode){
+  state.accountAction=mode;state.accountToken=new URLSearchParams(location.search).get(mode==="reset"?"reset":"verify");
+  $("accountActionPanel").classList.remove("hidden");$("accountActionMessage").textContent="";
+  $("resetPasswordField").classList.toggle("hidden",mode!=="reset");
+  $("accountActionLabel").textContent=mode==="reset"?"E-MAIL-ADRESSE":"E-MAIL-ADRESSE";
+  $("accountActionSubmit").textContent=mode==="reset"?"Passwort ändern":mode==="verify"?"E-Mail bestätigen":mode==="resend"?"Link erneut senden":"Link anfordern";
+  if(mode==="reset"){$("accountActionLabel").textContent="NEUES PASSWORT";$("accountActionInput").classList.add("hidden");}
+  else $("accountActionInput").classList.remove("hidden");
+  $("accountActionPanel").scrollIntoView({behavior:"smooth",block:"center"});
+}
+async function submitAccountAction(){
+  const mode=state.accountAction;
+  try{
+    let result;
+    if(mode==="verify")result=await api("/api/auth/verify",{method:"POST",body:JSON.stringify({token:state.accountToken})});
+    else if(mode==="reset")result=await api("/api/auth/reset-password",{method:"POST",body:JSON.stringify({token:state.accountToken,password:$("resetPasswordInput").value})});
+    else if(mode==="resend")result=await api("/api/auth/resend-verification",{method:"POST",body:JSON.stringify({email:$("accountActionInput").value.trim()})});
+    else result=await api("/api/auth/forgot-password",{method:"POST",body:JSON.stringify({email:$("accountActionInput").value.trim()})});
+    $("accountActionMessage").textContent=result.message||"Fertig.";
+    if(result.developmentVerificationUrl||result.developmentResetUrl)$("accountActionMessage").textContent+=" Entwicklungslink: "+(result.developmentVerificationUrl||result.developmentResetUrl);
+    if(mode==="verify"||mode==="reset"){history.replaceState(null,"",location.pathname);$("accountActionSubmit").textContent="Erledigt";}
+  }catch(error){$("accountActionMessage").textContent=error.message;}
+}
+async function uploadAvatar(file){
+  if(!file)return;
+  if(file.size>2*1024*1024){showError("avatarError","Das Bild darf höchstens 2 MB groß sein.");return;}
+  const form=new FormData();form.append("avatar",file);
+  try{const result=await api("/api/profile/avatar",{method:"POST",body:form});state.user={...state.user,...result.user};renderUserProfile();await refreshConversations();showError("avatarError","");showToast("Profilbild gespeichert.");}
+  catch(error){showError("avatarError",error.message);}
+  finally{$("avatarInput").value="";}
+}
 async function saveProfile(event) {
   event.preventDefault();showError("profileError","");
   try{
@@ -417,6 +450,10 @@ $("leaveRoomBtn").addEventListener("click",()=>{state.socket?.emit("leave-room")
 $("copyRoomInviteBtn").addEventListener("click",copyLegacyRoomInvite);
 $("legacyRoomComposer").addEventListener("submit",sendLegacyRoomMessage);
 $("profileForm").addEventListener("submit",saveProfile);
+$("avatarInput").addEventListener("change",e=>uploadAvatar(e.target.files?.[0]));
+$("forgotPasswordBtn").addEventListener("click",()=>showAccountAction("forgot"));
+$("resendVerificationBtn").addEventListener("click",()=>showAccountAction("resend"));
+$("accountActionSubmit").addEventListener("click",submitAccountAction);
 document.querySelectorAll(".color-option").forEach(b=>b.addEventListener("click",()=>{
   state.selectedColor=b.dataset.color;document.querySelectorAll(".color-option").forEach(x=>x.classList.toggle("selected",x===b));
   $("profileAvatar").style.setProperty("--avatar-color",state.selectedColor);
@@ -427,6 +464,9 @@ window.addEventListener("resize",()=>{if(!state.activeConversation&&!$("welcomeV
 
 async function boot() {
   setAuthMode("login");
+  const params=new URLSearchParams(location.search);
+  if(params.has("verify")){showAccountAction("verify");state.accountToken=params.get("verify");}
+  else if(params.has("reset")){showAccountAction("reset");state.accountToken=params.get("reset");}
   // Registration needs a separate username field; keep it visible only in registration mode.
   $("registerTab").addEventListener("click",()=>{const field=$("usernameRegisterField");if(field)field.classList.remove("hidden");});
   try{const result=await api("/api/auth/me");state.user=result.user;enterMessenger();await refreshConversations();maybeJoinInviteRoom();}
