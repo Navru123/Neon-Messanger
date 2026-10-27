@@ -2,94 +2,72 @@
 <html lang="de">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#050816">
-  <title>NEON Chat — Gruppenchat</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#10101a">
+  <meta name="description" content="NEON Messenger — private Chats, Gruppen und deine Community.">
+  <title>NEON — Messenger</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <div class="orb orb-a"></div><div class="orb orb-b"></div>
-
-  <main id="home" class="screen">
-    <section class="card hero">
-      <div class="logo">✦</div>
-      <div class="eyebrow">DEIN SPACE · DEINE CREW</div>
-      <h1>NEON <span>CHAT</span></h1>
-      <p class="muted intro">Ein Raum für alle. Alle können schreiben — auch wenn du offline bist.</p>
-
-      <label for="nameInput">DEIN NAME</label>
-      <input id="nameInput" maxlength="24" placeholder="Wie sollen dich Freunde sehen?" autocomplete="nickname">
-
-      <div class="actions">
-        <button id="createBtn" class="primary">＋ Raum erstellen</button>
-        <button id="showJoinBtn" class="secondary">Raum beitreten ↗</button>
+  <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+  <main class="app" id="app">
+    <section class="auth-screen" id="authScreen">
+      <div class="auth-art">
+        <a class="wordmark" href="/"><span class="brand-mark">N</span> NEON<span class="wordmark-light">/MESSENGER</span></a>
+        <div class="art-copy"><span class="kicker">DEIN RAUM. DEINE MENSCHEN.</span><h1>Gute Gespräche.<br><em>Ohne Umwege.</em></h1><p>Private Nachrichten und Gruppen — an einem Ort, der sich nach dir anfühlt.</p></div>
+        <div class="art-bottom"><span class="pulse"></span> PRIVATERE CHATS. KLARERES DESIGN.</div>
       </div>
-
-      <div id="joinBox" class="panel hidden">
-        <label for="codeInput">RAUM-CODE</label>
-        <input id="codeInput" maxlength="8" placeholder="ABCD2345" autocomplete="off">
-        <button id="joinBtn" class="primary full">Jetzt beitreten</button>
-      </div>
-
-      <div id="createdBox" class="panel hidden">
-        <div class="eyebrow">DEIN EINLADUNGSCODE</div>
-        <div id="createdCode" class="room-code">--------</div>
-        <p class="muted small">Teile den Link mit deiner Crew. Der Raum bleibt bestehen, auch wenn du gehst.</p>
-        <div class="actions">
-          <button id="copyBtn" class="secondary">⧉ Link kopieren</button>
-          <button id="mailBtn" class="secondary">✉ Outlook</button>
+      <div class="auth-pane">
+        <div class="auth-card">
+          <div class="mobile-brand wordmark"><span class="brand-mark">N</span> NEON</div>
+          <div class="auth-tabs" role="tablist"><button id="loginTab" class="auth-tab active" type="button">Anmelden</button><button id="registerTab" class="auth-tab" type="button">Konto erstellen</button></div>
+          <div class="auth-heading"><span class="kicker" id="authKicker">WILLKOMMEN ZURÜCK</span><h2 id="authTitle">Schön, dass du da bist.</h2><p id="authSubtitle">Melde dich an und setze deine Gespräche fort.</p></div>
+          <form id="authForm" novalidate>
+            <div id="registerFields" class="field hidden"><label for="registerName">ANZEIGENAME</label><input id="registerName" maxlength="24" autocomplete="nickname" placeholder="Wie sollen dich andere sehen?"></div>
+            <div class="field"><label for="loginName" id="loginLabel">E-MAIL ODER BENUTZERNAME</label><input id="loginName" required maxlength="254" autocomplete="username" placeholder="du@beispiel.de"></div>
+            <div class="field"><label for="password">PASSWORT</label><input id="password" type="password" required minlength="10" maxlength="128" autocomplete="current-password" placeholder="Mindestens 10 Zeichen"></div><div class="auth-extra"><button type="button" id="forgotPasswordBtn" class="text-button">Passwort vergessen?</button><button type="button" id="resendVerificationBtn" class="text-button hidden">Bestätigungslink erneut senden</button></div><div id="accountActionPanel" class="account-action-panel hidden"><label id="accountActionLabel" for="accountActionInput">E-MAIL-ADRESSE</label><input id="accountActionInput" type="email" maxlength="254" placeholder="du@beispiel.de"><div id="resetPasswordField" class="hidden"><label for="resetPasswordInput">NEUES PASSWORT</label><input id="resetPasswordInput" type="password" minlength="10" maxlength="128" placeholder="Mindestens 10 Zeichen"></div><p id="accountActionMessage" class="form-error" role="status"></p><button type="button" id="accountActionSubmit" class="button button-primary">Weiter</button></div>
+            <p class="form-error" id="authError" role="alert"></p>
+            <button class="button button-primary button-wide" id="authSubmit" type="submit">Anmelden <span>↗</span></button>
+          </form>
+          <p class="legal-note">Mit einem Konto kannst du private Chats und Gruppen erstellen. Nutze ein eigenes Passwort, das du nirgendwo sonst verwendest.</p>
         </div>
-        <button id="enterBtn" class="primary full">Chat öffnen →</button>
       </div>
-
-      <p id="homeError" class="error" role="alert"></p>
-      <p class="footnote">💾 Nachrichten werden gespeichert, damit sie später wieder da sind.</p>
     </section>
-  </main>
 
-  <main id="chatScreen" class="chat-screen hidden">
-    <section class="chat-shell">
-      <aside class="sidebar">
-        <div class="brand-row">
-          <div class="mini-logo">✦</div>
-          <div><b>NEON CHAT</b><div class="eyebrow">GROUP SPACE</div></div>
-        </div>
-
-        <div class="room-card">
-          <div class="eyebrow">DEIN RAUM</div>
-          <div id="roomCodeLabel" class="room-label">--------</div>
-          <button id="copyChatLinkBtn" class="secondary full">⧉ Einladung teilen</button>
-        </div>
-
-        <div class="user-line"><span class="status-dot"></span><span>Du bist <b id="myName"></b></span></div>
-        <div class="people-heading">ONLINE <span id="onlineCount">0</span></div>
-        <div id="userList" class="user-list"></div>
-        <div class="sidebar-bottom"><span class="status-dot"></span> Der Raum bleibt bestehen, wenn du gehst.</div>
+    <section id="messenger" class="messenger hidden">
+      <aside class="rail">
+        <a class="rail-brand" href="/" aria-label="NEON Startseite"><span class="brand-mark">N</span></a>
+        <button class="rail-button active" data-view="chats" aria-label="Chats" title="Chats">▤</button>
+        <button class="rail-button" data-view="people" aria-label="Personen" title="Personen">♙</button>
+        <button class="rail-button" data-view="rooms" aria-label="Raumcodes" title="Raumcodes">⌘</button>
+        <button class="rail-button" data-view="profile" aria-label="Profil" title="Profil">◉</button>
+        <button class="rail-button hidden" id="adminRail" data-view="admin" aria-label="Moderation" title="Moderation">⚑</button>
+        <div class="rail-spacer"></div><button class="rail-avatar" id="railAvatar" data-view="profile" aria-label="Mein Profil">N</button>
       </aside>
-
-      <section class="conversation">
-        <header class="chat-header">
-          <div class="header-icon">◎</div>
-          <div><h2>Der Gruppenchat</h2><p class="muted">Eine Nachricht erreicht alle im Raum.</p></div>
-          <div class="live-pill"><span class="status-dot"></span> LIVE</div>
-        </header>
-
-        <div id="messages" class="messages">
-          <div class="empty"><div class="empty-icon">✦</div><h3>Willkommen in deinem Space</h3><p>Schreib die erste Nachricht oder lade deine Freunde ein.</p></div>
-        </div>
-        <div id="notice" class="notice hidden" role="status"></div>
-
-        <form id="messageForm" class="composer">
-          <input id="messageInput" maxlength="2000" placeholder="Schreib eine Nachricht an alle …" autocomplete="off" disabled>
-          <button id="sendBtn" class="send-button" aria-label="Nachricht senden" disabled>➤</button>
-        </form>
-        <div class="composer-hint">ENTER ZUM SENDEN <span>·</span> MAX. 2000 ZEICHEN</div>
+      <aside class="chat-list-panel" id="chatListPanel">
+        <header class="panel-header"><div><span class="kicker">DEIN WORKSPACE</span><h2 id="listHeading">Nachrichten</h2></div><button id="newChatBtn" class="icon-button" aria-label="Neuen Chat starten" title="Neuer Chat">＋</button></header>
+        <label class="search-box"><span>⌕</span><input id="chatSearch" type="search" placeholder="Chats durchsuchen" aria-label="Chats durchsuchen"></label>
+        <div class="list-tabs"><button class="list-tab active" data-filter="all">Alle</button><button class="list-tab" data-filter="direct">Direkt</button><button class="list-tab" data-filter="group">Gruppen</button></div>
+        <div class="conversation-list" id="conversationList"><div class="loading-state">Deine Chats werden geladen …</div></div>
+        <footer class="account-footer"><div class="avatar avatar-small" id="footerAvatar">N</div><div class="account-copy"><b id="footerName">Mein Profil</b><span id="footerHandle">@neon</span></div><button id="logoutBtn" class="icon-button subtle" aria-label="Abmelden" title="Abmelden">↪</button></footer>
+      </aside>
+      <section class="content-area" id="contentArea">
+        <div class="welcome-view" id="welcomeView"><div class="welcome-symbol">N<span>+</span></div><span class="kicker">DEIN SPACE IST BEREIT</span><h2>Ein gutes Gespräch<br>fängt hier an.</h2><p>Wähle einen Chat aus oder starte ein Gespräch mit jemandem.</p><button id="welcomeNewChat" class="button button-primary">Neuen Chat starten ↗</button><div class="welcome-note"><span class="pulse"></span> Deine Nachrichten. Deine Community.</div></div>
+        <section class="chat-view hidden" id="chatView">
+          <header class="conversation-header"><button class="icon-button back-button" id="backToList" aria-label="Zurück zu Chats">←</button><div class="avatar" id="activeAvatar">N</div><div class="active-heading"><h2 id="activeTitle">Chat</h2><p id="activeSubtitle">Privater Chat</p></div><div class="header-actions"><button class="icon-button" id="chatInfoBtn" title="Chat-Informationen" aria-label="Chat-Informationen">ⓘ</button></div></header>
+          <div class="message-stream" id="messageStream"><div class="loading-state">Nachrichten werden geladen …</div></div>
+          <div id="chatNotice" class="chat-notice hidden" role="status"></div>
+          <form id="composer" class="composer"><label class="attach-button" title="Datei anhängen" aria-label="Datei anhängen">＋<input id="fileInput" type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain" hidden></label><textarea id="messageInput" rows="1" maxlength="2000" placeholder="Schreib eine Nachricht …" aria-label="Nachricht" disabled></textarea><button id="sendButton" class="send-button" type="submit" aria-label="Senden" disabled>↑</button><div class="composer-footnote">ENTER ZUM SENDEN · DATEIEN BIS 8 MB</div></form>
+        </section>
+        <section id="roomsView" class="utility-view hidden"><span class="kicker">DIE KLASSISCHEN NEON-RÄUME</span><h2>Raumcode-Chat</h2><p class="utility-intro">Erstelle einen teilbaren Raum oder tritt mit einem achtstelligen Einladungscode bei. Bestehende Räume bleiben erhalten.</p><div class="room-tools"><button id="createRoomBtn" class="button button-primary">＋ Raum erstellen</button><div class="room-join"><input id="roomCodeInput" maxlength="8" placeholder="8-stelliger Code" aria-label="Raumcode"><button id="joinRoomBtn" class="button button-secondary">Beitreten ↗</button></div><p id="roomError" class="form-error" role="alert"></p></div><section id="legacyRoomPanel" class="legacy-room-panel hidden"><header class="legacy-room-header"><div><span class="kicker">AKTIVER RAUM</span><h3 id="legacyRoomCode">--------</h3></div><button id="leaveRoomBtn" class="button button-secondary">Raum verlassen</button></header><div class="legacy-room-meta"><span><i class="pulse"></i> <b id="legacyOnlineCount">0</b> online</span><button id="copyRoomInviteBtn" class="button button-secondary">Einladung kopieren</button></div><div id="legacyRoomUsers" class="legacy-room-users"></div><div id="legacyRoomMessages" class="legacy-room-messages"><div class="loading-state">Raumnachrichten werden geladen …</div></div><form id="legacyRoomComposer" class="legacy-room-composer"><input id="legacyRoomMessage" maxlength="2000" placeholder="Nachricht an alle im Raum …" autocomplete="off"><button class="button button-primary" type="submit">Senden ↑</button></form></section></section>
+        <section id="peopleView" class="utility-view hidden"><span class="kicker">DEINE COMMUNITY</span><h2>Menschen finden</h2><p class="utility-intro">Suche nach einem Benutzernamen und starte einen privaten Chat.</p><label class="search-box people-search"><span>⌕</span><input id="peopleSearch" type="search" placeholder="Mindestens 2 Zeichen …"></label><div id="peopleResults" class="people-results"><p class="muted-copy">Suche nach einem Namen, um loszulegen.</p></div></section>
+        <section id="profileView" class="utility-view hidden"><span class="kicker">DEIN AUFTRITT</span><h2>Profil bearbeiten</h2><p class="utility-intro">So sehen dich andere in NEON.</p><form id="profileForm" class="profile-form"><div class="profile-preview"><div class="avatar avatar-large" id="profileAvatar">N</div><div><b id="profileUsername">Benutzername</b><p id="profileEmail">Konto</p><label class="button button-secondary avatar-upload-label" for="avatarInput">Bild-Avatar hochladen</label><input id="avatarInput" type="file" accept="image/jpeg,image/png,image/webp" hidden></div></div><p id="avatarError" class="form-error" role="alert"></p><label for="displayName">ANZEIGENAME</label><input id="displayName" maxlength="24" required><span class="field-label">AVATAR-FARBE</span><div class="color-options"><button type="button" class="color-option selected" data-color="#8b7cff" style="--swatch:#8b7cff" aria-label="Violett"></button><button type="button" class="color-option" data-color="#48c6ef" style="--swatch:#48c6ef" aria-label="Blau"></button><button type="button" class="color-option" data-color="#f59eae" style="--swatch:#f59eae" aria-label="Rosa"></button><button type="button" class="color-option" data-color="#55d6a7" style="--swatch:#55d6a7" aria-label="Grün"></button><button type="button" class="color-option" data-color="#f3b562" style="--swatch:#f3b562" aria-label="Orange"></button><button type="button" class="color-option" data-color="#fb7185" style="--swatch:#fb7185" aria-label="Koralle"></button><button type="button" class="color-option" data-color="#60a5fa" style="--swatch:#60a5fa" aria-label="Himmelblau"></button></div><p id="profileError" class="form-error" role="alert"></p><button class="button button-primary" type="submit">Änderungen speichern</button></form></section>
+        <section id="adminView" class="utility-view hidden"><span class="kicker">SICHERHEIT & COMMUNITY</span><h2>Moderation</h2><p class="utility-intro">Meldungen prüfen und Konten verwalten. Admin-Rechte werden serverseitig kontrolliert.</p><div id="adminContent" class="admin-content"><p class="muted-copy">Moderationsdaten werden geladen …</p></div></section>
       </section>
     </section>
+    <div class="toast hidden" id="toast" role="status"></div>
+    <dialog id="newChatDialog" class="modal"><form id="newChatForm"><button type="button" class="modal-close" id="closeDialog" aria-label="Schließen">×</button><span class="kicker">NEUES GESPRÄCH</span><h2>Wen möchtest du erreichen?</h2><p>Suche nach einem Benutzernamen, um einen Chat zu beginnen.</p><label class="search-box"><span>⌕</span><input id="dialogSearch" type="search" placeholder="Benutzername …" autocomplete="off"></label><div id="dialogResults" class="dialog-results"></div><div id="groupOptions" class="hidden"><label for="groupTitle">GRUPPENNAME</label><input id="groupTitle" maxlength="48" placeholder="Zum Beispiel: Wochenend-Crew"><p class="modal-help">Wähle mindestens zwei Personen aus, um eine Gruppe zu erstellen.</p></div><p id="dialogError" class="form-error" role="alert"></p><div class="modal-actions"><button type="button" id="groupModeBtn" class="button button-secondary">Gruppe erstellen</button><button type="submit" id="dialogSubmit" class="button button-primary" disabled>Chat starten ↗</button></div></form></dialog>
+    <dialog id="infoDialog" class="modal"><form method="dialog"><button class="modal-close" aria-label="Schließen">×</button><span class="kicker">CHAT-INFORMATIONEN</span><h2 id="infoTitle">Chat</h2><p id="infoDescription"></p><div id="infoMembers" class="member-list"></div><button type="button" class="button button-secondary button-wide" id="reportLastMessage">Letzte Nachricht melden</button></form></dialog>
   </main>
-
-  <div id="toast" class="toast hidden"></div>
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="/app.js"></script>
-</body>
-</html>
+  <script src="/socket.io/socket.io.js"></script><script src="/app.js"></script>
+</body></html>

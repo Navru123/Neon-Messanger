@@ -1,50 +1,59 @@
-# NEON Gruppenchat
+# NEON Messenger
 
-Ein futuristischer Gruppenchat mit Raum-Code. Alle Teilnehmenden schreiben in denselben Chat. Die Nachrichten werden serverseitig in SQLite gespeichert und sind weiterhin verfügbar, wenn der Raum-Ersteller seinen Browser schließt.
+Responsive Messenger mit Registrierung, Direktnachrichten, Gruppen, Echtzeit-Chat, Datei-Uploads und Moderationsbereich. Bestehende Raumcode-Chats bleiben im Backend erhalten.
 
-## Was kann die Website?
+## Lokal starten
 
-- Raum erstellen und einen 8-stelligen Einladungscode bekommen
-- Einladungslink kopieren oder über Outlook teilen
-- Alle Teilnehmenden können in den Gruppenchat schreiben
-- Live-Anzeige, wer online ist
-- Die letzten 100 Nachrichten werden beim Beitreten geladen
-- Nachrichten werden in SQLite gespeichert; sie bleiben nach Browser-Neustarts vorhanden
-- Responsive Design für Handy und Desktop
-- Grundlegende Schutzmaßnahmen: HTTPS über den Hosting-Anbieter, Rate-Limit für Nachrichten, Sicherheitsheader und begrenzte Eingabelängen
-
-## Lokal testen
-
-Node.js 20 oder neuer installieren. Im Projektordner:
+Node.js 20 oder neuer erforderlich.
 
 ```bash
 npm install
+npm run check
 npm start
 ```
 
-Dann `http://localhost:3000` öffnen. Für Freunde außerhalb deines Geräts brauchst du eine gehostete URL; `localhost` ist nur auf deinem eigenen Gerät erreichbar.
+Die Anwendung läuft anschließend auf http://localhost:3000. SQLite und Uploads liegen standardmäßig unter `data/`.
 
-## Online stellen
+## Kontosicherheit und E-Mail
 
-Diese App braucht Hosting für Node.js/WebSockets **und persistenten Speicher**.
+Registrierung benötigt E-Mail-Bestätigung. Passwort-Reset- und Bestätigungslinks werden per SMTP verschickt. Für lokale Entwicklung können Links in Serverlogs und API-Antworten erscheinen; das ist nur für Entwicklung gedacht.
 
-1. Lade alle Dateien aus diesem ZIP in ein neues privates oder öffentliches GitHub-Repository.
-2. Wähle einen Hosting-Anbieter, der Node.js und Socket.IO/WebSockets unterstützt.
-3. Setze den Startbefehl auf `npm start`.
-4. Lege einen persistenten Datenträger/Volume an und setze `DB_PATH` auf einen Pfad innerhalb dieses Volumes, zum Beispiel `/var/data/chat.db`.
-5. Stelle die Website bereit und teile die HTTPS-URL mit Freunden.
+Produktionsvariablen:
 
-Wenn der Hosting-Anbieter den Datenträger nicht dauerhaft speichert, können Daten bei einem Neustart oder einer neuen Bereitstellung verloren gehen. Prüfe diese Einstellung beim Anbieter.
+| Variable | Zweck |
+| --- | --- |
+| `SESSION_SECRET` | Zufälliges, dauerhaftes Geheimnis mit mindestens 32 Zeichen; zwingend in Produktion |
+| `PUBLIC_URL` | Öffentliche Basis-URL, z. B. `https://deine-domain.example` |
+| `SMTP_HOST` | SMTP-Server des Mailanbieters |
+| `SMTP_PORT` | Meist 587 für STARTTLS oder 465 für TLS |
+| `SMTP_SECURE` | `true` für TLS ab Verbindungsstart, sonst `false` |
+| `SMTP_USER` / `SMTP_PASS` | SMTP-Zugangsdaten |
+| `SMTP_FROM` | Verifizierte Absenderadresse |
+| `ADMIN_EMAIL` | E-Mail des Admin-Kontos, vor der Registrierung setzen |
+| `DB_PATH` | Pfad zur SQLite-Datenbank |
 
-## Wichtige Grenzen
+Die SMTP-Daten erhältst du von deinem Mailanbieter. Niemals Passwörter oder SMTP-Schlüssel in GitHub-Dateien committen.
 
-- Der Raum-Code ist ein Einladungsschlüssel: Jeder, der den Code oder den Link hat, kann beitreten. Teile ihn nur mit deinen Freunden.
-- Namen sind nicht durch Konten oder Passwörter geschützt; sie können nachgeahmt werden.
-- Der Server verarbeitet und speichert Nachrichten. Das ist **keine Ende-zu-Ende-Verschlüsselung**. Teile dort keine Passwörter oder sehr privaten Informationen.
-- Pro Raum werden im Verlauf die letzten 100 Nachrichten an neue Teilnehmende geladen; weitere Nachrichten bleiben in der Datenbank, erscheinen aber nicht automatisch im anfänglichen Verlauf.
-- Räume und gespeicherte Nachrichten werden im einfachen Starterprojekt nicht automatisch gelöscht.
+## Render-Bereitstellung
 
+`render.yaml` legt einen Node-Webservice, ein dauerhaftes Volume und die nötigen Umgebungsvariablen-Platzhalter an. Ein persistentes Volume kann kostenpflichtig sein. Vor dem Deployment die angezeigten Kosten und Konfiguration prüfen.
 
-## Website-Loader / Hosting-Konfiguration
+1. `PUBLIC_URL` auf die endgültige HTTPS-Adresse setzen.
+2. SMTP-Server, Port, TLS-Einstellung, Nutzer, Passwort und Absender konfigurieren.
+3. `ADMIN_EMAIL` vor dem Registrieren des Admin-Kontos setzen.
+4. Sicherstellen, dass `SESSION_SECRET` dauerhaft bleibt.
+5. Nach dem Deployment Registrierung, E-Mail-Link, Login, Passwort-Reset, Direktchat, Gruppe, Avatar, Datei-Upload und Moderation testen.
 
-Im Projekt-Root liegt `render.yaml`. Diese Datei beschreibt den Node-Webservice und den persistenten Datenordner. Die vollständigen Schritte stehen in `ONLINE-STELLEN.md`.
+## Funktionen und Grenzen
+
+- Passwörter werden mit scrypt gehasht; Sessions sind signiert und über HttpOnly-Cookies geschützt.
+- Bestätigungslinks laufen nach 24 Stunden ab; Passwort-Reset-Links nach einer Stunde und sind nur einmal nutzbar.
+- Avatar-Bilder: JPEG, PNG und WebP bis 2 MB, mit Dateisignatur-Prüfung.
+- Chat-Dateien bis 8 MB; Downloads sind nur für Mitglieder der jeweiligen Unterhaltung verfügbar. Dateisignaturen werden geprüft; das ersetzt keinen Virenscanner.
+- Admin-Moderation: Meldungen bearbeiten, Nachrichten entfernen, Konten sperren.
+- Es gibt **keine Ende-zu-Ende-Verschlüsselung**; der Server kann gespeicherte Nachrichten lesen.
+- E-Mail-Verifizierung schützt nicht vor kompromittierten E-Mail-Konten. Vor öffentlichem Einsatz sollten Integrationstests, Backup-/Löschregeln, Monitoring und gegebenenfalls Virenscan ergänzt werden.
+
+## CI
+
+GitHub Actions führt `npm install`, JavaScript-Syntaxprüfungen und einen Smoke-Test des Health-Endpunkts aus. Das ist kein vollständiger Browser- oder Sicherheitstest.
