@@ -75,7 +75,7 @@ async function onAuthSubmit(event) {
       if (payload.displayName.length < 2) throw new Error("Dein Anzeigename muss mindestens 2 Zeichen lang sein.");
     }
     const result = await api(register ? "/api/auth/register" : "/api/auth/login",{method:"POST",body:JSON.stringify(payload)});
-    state.user = result.user; enterMessenger(); await refreshConversations();
+    state.user = result.user; enterMessenger(); await refreshConversations(); maybeJoinInviteRoom();
   } catch (error) { showError("authError",error.message); }
   finally { button.disabled = false; }
 }
@@ -154,6 +154,12 @@ function showView(view) {
   else if(view==="people") $("peopleView").classList.remove("hidden");
   else if(view==="profile") $("profileView").classList.remove("hidden");
   else if(view==="admin") { $("adminView").classList.remove("hidden"); loadAdmin(); }
+}
+function maybeJoinInviteRoom() {
+  const code=new URLSearchParams(location.search).get("room");
+  if(code && /^[A-Za-z0-9]{8}$/.test(code)) {
+    showView("rooms");$("roomCodeInput").value=code.toUpperCase();joinLegacyRoom(code);
+  }
 }
 async function refreshConversations() {
   try {
@@ -423,7 +429,7 @@ async function boot() {
   setAuthMode("login");
   // Registration needs a separate username field; keep it visible only in registration mode.
   $("registerTab").addEventListener("click",()=>{const field=$("usernameRegisterField");if(field)field.classList.remove("hidden");});
-  try{const result=await api("/api/auth/me");state.user=result.user;enterMessenger();await refreshConversations();}
+  try{const result=await api("/api/auth/me");state.user=result.user;enterMessenger();await refreshConversations();maybeJoinInviteRoom();}
   catch{$("authScreen").classList.remove("hidden");$("messenger").classList.add("hidden");}
 }
 boot();
