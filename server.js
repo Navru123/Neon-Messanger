@@ -402,6 +402,13 @@ io.on("connection",socket=>{
       socket.join("user:"+user.id);
     }
   }
+  socket.on("leave-room",()=>{
+    const code=socket.data.roomCode;
+    if(!code)return;
+    socket.leave(code);
+    delete socket.data.roomCode;delete socket.data.name;delete socket.data.clientId;
+    broadcastUsers(code);
+  });
   socket.on("join-conversation",({conversationId}={})=>{
     if (!socket.data.userId || !isMember(clean(conversationId,64),socket.data.userId)) return;
     socket.join("conversation:"+conversationId);
