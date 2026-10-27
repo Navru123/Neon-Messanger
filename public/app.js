@@ -2,7 +2,8 @@ const $ = id => document.getElementById(id);
 const state = {
   user: null, socket: null, conversations: [], activeConversation: null,
   messages: [], users: [], selectedUsers: new Set(), groupMode: false,
-  filter: "all", selectedColor: "#8b7cff", lastMessageId: null, toastTimer: null
+  filter: "all", selectedColor: "#8b7cff", lastMessageId: null, toastTimer: null,
+  roomCode: "", roomMessages: [], roomUsers: []
 };
 const COLORS = ["#8b7cff","#48c6ef","#f59eae","#55d6a7","#f3b562","#fb7185","#60a5fa"];
 const views = ["welcomeView","chatView","peopleView","profileView","adminView"];
@@ -88,6 +89,20 @@ function connectSocket() {
   if (state.socket) state.socket.disconnect();
   state.socket = io({transports:["websocket","polling"]});
   state.socket.on("connect",()=>{});
+  state.socket.on("joined",data=>{
+    state.roomCode=data.code;state.roomMessages=Array.isArray(data.messages)?data.messages:[];state.roomUsers=[];
+    $("legacyRoomPanel").classList.remove("hidden");$("legacyRoomCode").textContent=data.code;
+    showError("roomError","");renderLegacyRoomMessages();
+  });
+  state.socket.on("room-users",users=>{state.roomUsers=Array.isArray(users)?users:[];renderLegacyRoomUsers();});
+  state.socket.on("new-message",message=>{
+    if(!state.roomCode)return;
+    if(!state.roomMessages.some(m=>m.id===message.id))state.roomMessages.push(message);
+    if(state.roomMessages.length>100)state.roomMessages.shift();
+    renderLegacyRoomMessages();
+  });
+  state.socket.on("join-error",message=>showError("roomError",message));
+
   state.socket.on("new-chat-message",payload=>{
     if (!payload?.message || !payload.conversationId) return;
     if (state.activeConversation?.id === payload.conversationId) {
@@ -124,9 +139,9 @@ function renderUserProfile() {
 function showView(view) {
   document.querySelectorAll(".rail-button").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
   if (window.matchMedia("(max-width: 650px)").matches) {
-    $("chatListPanel").classList.toggle("compact-hidden",view==="chat");
+    $("chatListPanel").classList.toggle("compact-hidden",["chat","rooms","people","profile","admin"].includes(view));
     $("contentArea").classList.toggle("show-chat",view==="chat");
-    $("contentArea").classList.toggle("show-utility",["people","profile","admin"].includes(view));
+    $("contentArea").classList.toggle("show-utility",["rooms","people","profile","admin"].includes(view));
   }
   views.forEach(id=>$(id).classList.add("hidden"));
   if(view==="chats") {
@@ -135,7 +150,8 @@ function showView(view) {
     else $("welcomeView").classList.remove("hidden");
   } else if(view==="chat") {
     $("welcomeView").classList.add("hidden");$("chatView").classList.remove("hidden");
-  } else if(view==="people") $("peopleView").classList.remove("hidden");
+  } else if(view==="rooms") $("roomsView").classList.remove("hidden");
+  else if(view==="people") $("peopleView").classList.remove("hidden");
   else if(view==="profile") $("profileView").classList.remove("hidden");
   else if(view==="admin") { $("adminView").classList.remove("hidden"); loadAdmin(); }
 }
@@ -252,6 +268,55 @@ async function createConversation(event) {
     renderConversationList();await openConversation(result.conversation.id);showToast("Chat ist bereit.");
   }catch(error){showError("dialogError",error.message);}
 }
+function joinLegacyRoom(rawCode) {
+  const code=String(rawCode||"").trim().toUpperCase();
+  if(!/^[A-Z0-9]{8}$/.test(code)){showError("roomError","Der Raumcode muss genau 8 Zeichen haben.");return;}
+  if(!state.socket){showError("roomError","Die Verbindung ist noch nicht bereit.");return;}
+  showError("roomError","");
+  if(state.roomCode)state.socket.emit("leave-room");
+  state.roomCode=code;state.roomMessages=[];state.roomUsers=[];
+  $("legacyRoomPanel").classList.remove("hidden");$("legacyRoomCode").textContent=code;
+  $("legacyRoomMessages").innerHTML="<div class=\"loading-state\">Raumnachrichten werden geladen …</div>";
+  state.socket.emit("join-room",{code,name:state.user.displayName||state.user.username,clientId:state.user.id.replace(/[^A-Za-z0-9_-]/g,"").slice(0,80)});
+}
+function renderLegacyRoomMessages(){
+  const box=$("legacyRoomMessages");if(!box)return;
+  if(!state.roomMessages.length){box.innerHTML="<div class=\"stream-empty\"><strong>Der Raum ist bereit.</strong>Schreib die erste Nachricht oder lade deine Leute ein.</div>";return;}
+  box.innerHTML="";
+  for(const m of state.roomMessages){
+    const row=document.createElement("div");row.className="legacy-message";
+    const head=document.createElement("div");head.className="legacy-message-head";
+    const name=document.createElement("b");name.textContent=m.name||"Unbekannt";
+    const time=document.createElement("time");time.textContent=shortTime(m.time);
+    const body=document.createElement("p");body.textContent=m.text||"";
+    head.append(name,time);row.append(head,body);box.appendChild(row);
+  }
+  box.scrollTop=box.scrollHeight;
+}
+function renderLegacyRoomUsers(){
+  $("legacyOnlineCount").textContent=state.roomUsers.length;
+  const box=$("legacyRoomUsers");box.innerHTML="";
+  for(const user of state.roomUsers){
+    const chip=document.createElement("span");chip.className="legacy-user";
+    chip.textContent=user.name+(user.id===state.user.id?" (du)":"");box.appendChild(chip);
+  }
+}
+async function createLegacyRoom(){
+  showError("roomError","");
+  try{const result=await api("/api/rooms",{method:"POST",body:JSON.stringify({})});$("roomCodeInput").value=result.code;joinLegacyRoom(result.code);showToast("Raum erstellt. Teile den Code mit deiner Crew.");}
+  catch(error){showError("roomError",error.message);}
+}
+async function copyLegacyRoomInvite(){
+  if(!state.roomCode)return;
+  const link=location.origin+location.pathname+"?room="+encodeURIComponent(state.roomCode);
+  try{await navigator.clipboard.writeText(link);showToast("Einladungslink kopiert.");}
+  catch{window.prompt("Kopiere diesen Einladungslink:",link);}
+}
+function sendLegacyRoomMessage(event){
+  event.preventDefault();const input=$("legacyRoomMessage"),text=input.value.trim();
+  if(!text||!state.roomCode||!state.socket?.connected){showToast("Du bist gerade nicht verbunden.");return;}
+  state.socket.emit("chat-message",{text});input.value="";
+}
 async function saveProfile(event) {
   event.preventDefault();showError("profileError","");
   try{
@@ -339,6 +404,12 @@ $("reportLastMessage").addEventListener("click",()=>{
   const latest=[...state.messages].reverse().find(m=>m.senderId!==state.user.id);
   $("infoDialog").close();if(latest)reportMessage(latest.id);else showToast("Es gibt keine fremde Nachricht zum Melden.");
 });
+$("createRoomBtn").addEventListener("click",createLegacyRoom);
+$("joinRoomBtn").addEventListener("click",()=>joinLegacyRoom($("roomCodeInput").value));
+$("roomCodeInput").addEventListener("input",e=>{e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,8);});
+$("leaveRoomBtn").addEventListener("click",()=>{state.socket?.emit("leave-room");state.roomCode="";state.roomMessages=[];state.roomUsers=[];$("legacyRoomPanel").classList.add("hidden");showToast("Du hast den Raum verlassen.");});
+$("copyRoomInviteBtn").addEventListener("click",copyLegacyRoomInvite);
+$("legacyRoomComposer").addEventListener("submit",sendLegacyRoomMessage);
 $("profileForm").addEventListener("submit",saveProfile);
 document.querySelectorAll(".color-option").forEach(b=>b.addEventListener("click",()=>{
   state.selectedColor=b.dataset.color;document.querySelectorAll(".color-option").forEach(x=>x.classList.toggle("selected",x===b));
