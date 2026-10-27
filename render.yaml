@@ -14,7 +14,21 @@ services:
         value: /var/data/chat.db
       - key: SESSION_SECRET
         generateValue: true
+      - key: PUBLIC_URL
+        sync: false
       - key: ADMIN_EMAIL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
         sync: false
     disk:
       name: neon-messenger-data
