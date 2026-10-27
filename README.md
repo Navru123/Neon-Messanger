@@ -1,50 +1,62 @@
-# NEON Gruppenchat
+# NEON Messenger
 
-Ein futuristischer Gruppenchat mit Raum-Code. Alle Teilnehmenden schreiben in denselben Chat. Die Nachrichten werden serverseitig in SQLite gespeichert und sind weiterhin verfügbar, wenn der Raum-Ersteller seinen Browser schließt.
+NEON Messenger ist eine Node.js-/Socket.IO-Chat-App mit responsiver Oberfläche, Benutzerkonten, Direktnachrichten und Gruppen. Der bisherige Raumcode-Chat bleibt für vorhandene Räume und ältere Clients verfügbar.
 
-## Was kann die Website?
+## Funktionen
 
-- Raum erstellen und einen 8-stelligen Einladungscode bekommen
-- Einladungslink kopieren oder über Outlook teilen
-- Alle Teilnehmenden können in den Gruppenchat schreiben
-- Live-Anzeige, wer online ist
-- Die letzten 100 Nachrichten werden beim Beitreten geladen
-- Nachrichten werden in SQLite gespeichert; sie bleiben nach Browser-Neustarts vorhanden
-- Responsive Design für Handy und Desktop
-- Grundlegende Schutzmaßnahmen: HTTPS über den Hosting-Anbieter, Rate-Limit für Nachrichten, Sicherheitsheader und begrenzte Eingabelängen
+- Registrierung mit E-Mail, Benutzername, Anzeigename und Passwort
+- Passwort-Hashes mit scrypt, signierte HttpOnly-Sitzungscookies und serverseitige Authentifizierung
+- Private Direktnachrichten und Gruppen mit bis zu 20 Mitgliedern
+- Echtzeit-Nachrichten über Socket.IO; gespeicherte Nachrichten in SQLite
+- Profilname und Farb-Avatar
+- Uploads bis 8 MB: JPEG, PNG, GIF, WebP, PDF und Textdateien; Downloads sind auf Chat-Mitglieder beschränkt
+- Admin-Moderation: Meldungen ansehen/erledigen, Nachrichten entfernen und Konten sperren
+- Ratenbegrenzung, Helmet-Sicherheitsheader, Eingabegrenzen und Berechtigungsprüfungen auf dem Server
+- Smartphone- und Desktop-Layout
+- Legacy-Raumcodes und bestehende Raum-Nachrichten bleiben im Backend erhalten
 
-## Lokal testen
+## Lokal starten
 
-Node.js 20 oder neuer installieren. Im Projektordner:
+Voraussetzung: Node.js 20 oder neuer.
 
 ```bash
 npm install
+npm run check
 npm start
 ```
 
-Dann `http://localhost:3000` öffnen. Für Freunde außerhalb deines Geräts brauchst du eine gehostete URL; `localhost` ist nur auf deinem eigenen Gerät erreichbar.
+Öffne danach http://localhost:3000. Datenbank und Uploads werden standardmäßig im Ordner `data/` abgelegt. Für eine echte Bereitstellung brauchst du persistenten Speicher.
 
-## Online stellen
+## Konfiguration
 
-Diese App braucht Hosting für Node.js/WebSockets **und persistenten Speicher**.
+| Variable | Zweck |
+| --- | --- |
+| `PORT` | Port des Webservers (vom Hosting-Anbieter gesetzt) |
+| `DB_PATH` | Vollständiger Pfad zur SQLite-Datenbank |
+| `SESSION_SECRET` | Zufälliges Geheimnis mit mindestens 32 Zeichen; in Produktion dauerhaft konfigurieren |
+| `ADMIN_EMAIL` | E-Mail-Adresse, die bei der Registrierung Admin-Rechte erhält |
 
-1. Lade alle Dateien aus diesem ZIP in ein neues privates oder öffentliches GitHub-Repository.
-2. Wähle einen Hosting-Anbieter, der Node.js und Socket.IO/WebSockets unterstützt.
-3. Setze den Startbefehl auf `npm start`.
-4. Lege einen persistenten Datenträger/Volume an und setze `DB_PATH` auf einen Pfad innerhalb dieses Volumes, zum Beispiel `/var/data/chat.db`.
-5. Stelle die Website bereit und teile die HTTPS-URL mit Freunden.
+**Admin-Konto:** Setze `ADMIN_EMAIL` vor der Registrierung auf die E-Mail-Adresse des gewünschten Admin-Kontos. Registriere dieses Konto danach. Bereits bestehende Konten werden dadurch nicht automatisch zu Admins. Halte diese Umgebungsvariable privat.
 
-Wenn der Hosting-Anbieter den Datenträger nicht dauerhaft speichert, können Daten bei einem Neustart oder einer neuen Bereitstellung verloren gehen. Prüfe diese Einstellung beim Anbieter.
+## Render
 
-## Wichtige Grenzen
+Die Datei `render.yaml` konfiguriert einen Node-Webservice, ein persistentes Volume unter `/var/data` und ein generiertes `SESSION_SECRET`. Beim Verknüpfen des Projekts prüfe die angezeigten Ressourcen und Kosten, bevor du ein Deployment startest. Persistente Datenträger können kostenpflichtig sein.
 
-- Der Raum-Code ist ein Einladungsschlüssel: Jeder, der den Code oder den Link hat, kann beitreten. Teile ihn nur mit deinen Freunden.
-- Namen sind nicht durch Konten oder Passwörter geschützt; sie können nachgeahmt werden.
-- Der Server verarbeitet und speichert Nachrichten. Das ist **keine Ende-zu-Ende-Verschlüsselung**. Teile dort keine Passwörter oder sehr privaten Informationen.
-- Pro Raum werden im Verlauf die letzten 100 Nachrichten an neue Teilnehmende geladen; weitere Nachrichten bleiben in der Datenbank, erscheinen aber nicht automatisch im anfänglichen Verlauf.
-- Räume und gespeicherte Nachrichten werden im einfachen Starterprojekt nicht automatisch gelöscht.
+Nach dem Deployment:
+1. Trage `ADMIN_EMAIL` in den privaten Umgebungsvariablen des Dienstes ein, bevor das Admin-Konto registriert wird.
+2. Kontrolliere, dass `SESSION_SECRET` dauerhaft erhalten bleibt.
+3. Prüfe `/api/health` und teste Registrierung, Login, Direktchat, Gruppe, Upload und Abmeldung.
 
+## Wichtige Sicherheitsgrenzen
 
-## Website-Loader / Hosting-Konfiguration
+- Das ist **keine Ende-zu-Ende-Verschlüsselung**: Der Server kann gespeicherte Nachrichten verarbeiten und lesen.
+- Die Registrierung prüft das E-Mail-Format, sendet aber noch keine Verifizierungs-E-Mail und bietet keinen Passwort-Reset.
+- Avatare sind aktuell farbige Initialen; Bild-Avatar-Uploads sind noch nicht implementiert.
+- Uploads sind auf Dateiendungen nicht angewiesen, aber die Prüfung nutzt den vom Client angegebenen MIME-Typ. Für öffentlich genutzte Dienste empfiehlt sich zusätzlich serverseitige Dateiinhaltsprüfung und Virenscan.
+- Admins können Meldungen prüfen, Nachrichten entfernen und Nicht-Admin-Konten sperren. Es gibt noch kein erweitertes Rollenmodell oder Gruppen-Owner-Management.
+- Die SQLite-Datenbank und Uploads müssen auf einem dauerhaften Volume liegen. Ohne persistente Speicherung gehen sie bei Neustarts/Deployments möglicherweise verloren.
+- Verwende ein starkes, einzigartiges Passwort und teile keine privaten Informationen in Chats mit Personen, denen du nicht vertraust.
 
-Im Projekt-Root liegt `render.yaml`. Diese Datei beschreibt den Node-Webservice und den persistenten Datenordner. Die vollständigen Schritte stehen in `ONLINE-STELLEN.md`.
+## Bekannte nächste Schritte vor öffentlichem Einsatz
+
+Diese Überarbeitung wurde über die GitHub-Datei-API erstellt; in dieser Umgebung wurde kein vollständiger lokaler Build mit Installation aller Abhängigkeiten ausgeführt. Vor produktivem Einsatz müssen die Änderungen in einer echten Node.js-Umgebung getestet werden. Empfehlenswert sind automatisierte Integrationstests, E-Mail-Verifizierung/Passwort-Reset, Dateiinhaltsprüfung und Datenschutz-/Löschregeln.
