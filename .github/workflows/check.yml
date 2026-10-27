@@ -7,7 +7,7 @@ on:
     branches: [main, "feature/**"]
 
 jobs:
-  syntax:
+  syntax-and-smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,14 +16,14 @@ jobs:
           node-version: 20
       - run: npm install
       - run: npm run check
-      - name: Smoke test server health endpoint
+      - name: Start isolated test server
         run: |
-          npm start > /tmp/neon-messenger.log 2>&1 &
+          DB_PATH=/tmp/neon-messenger-ci.db NODE_ENV=test SESSION_SECRET=ci-test-secret-that-is-long-enough-for-sessions-123456 node server.js > /tmp/neon-messenger.log 2>&1 &
           server_pid=$!
           trap "kill $server_pid 2>/dev/null || true" EXIT
-          for attempt in $(seq 1 20); do
-            if curl --fail --silent http://127.0.0.1:3000/api/health; then exit 0; fi
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000/api/health; then break; fi
+            if [ "$attempt" -eq 30 ]; then cat /tmp/neon-messenger.log; exit 1; fi
             sleep 1
           done
-          cat /tmp/neon-messenger.log
-          exit 1
+          node scripts/integration-smoke.js
