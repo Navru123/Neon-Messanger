@@ -132,7 +132,7 @@ function cookieValue(req) {
 function sessionUser(req) {
   const token = cookieValue(req);
   if (!token) return null;
-  const row = db.prepare(`SELECT u.id,u.email,u.username,u.display_name AS displayName,u.avatar_color AS avatarColor,u.role,u.banned
+  const row = db.prepare(`SELECT u.id,u.email,u.username,u.display_name AS displayName,u.avatar_color AS avatarColor,u.avatar_url AS avatarUrl,u.role,u.banned
     FROM sessions s JOIN users u ON u.id=s.user_id
     WHERE s.token_hash=? AND s.expires_at>? `).get(crypto.createHash("sha256").update(token).digest("hex"), Date.now());
   if (!row || row.banned) return null;
@@ -223,6 +223,7 @@ function broadcastUsers(code) { io.to(code).emit("room-users", getRoomUsers(code
 
 app.get("/api/health", (_req,res) => res.json({ ok: true }));
 app.post("/api/auth/register", async (req,res) => {
+  if (process.env.NODE_ENV === "production" && (!SMTP_READY || !process.env.PUBLIC_URL)) return res.status(503).json({error:"Registrierung ist noch nicht verfügbar: SMTP und PUBLIC_URL müssen konfiguriert sein."});
   const email = emailClean(req.body?.email);
   const username = clean(req.body?.username, 24).toLowerCase();
   const displayName = usernameClean(req.body?.displayName || req.body?.username);
@@ -237,10 +238,10 @@ app.post("/api/auth/register", async (req,res) => {
     const userId = id();
     const role = process.env.ADMIN_EMAIL && email === emailClean(process.env.ADMIN_EMAIL) ? "admin" : "user";
     const color = ["#8b7cff","#48c6ef","#f59eae","#55d6a7","#f3b562"][crypto.randomInt(5)];
-    db.prepare("INSERT INTO users(id,email,username,display_name,password_hash,avatar_color,role,created_at) VALUES(?,?,?,?,?,?,?,?)")
+    db.prepare("INSERT INTO users(id,email,username,display_name,password_hash,avatar_color,role,created_at,email_verified) VALUES(?,?,?,?,?,?,?,?,0)")
       .run(userId,email,username,displayName,salt.toString("hex")+":"+derived.toString("hex"),color,role,Date.now());
-    setSession(res,userId);
-    res.status(201).json({ user: publicUser(db.prepare("SELECT * FROM users WHERE id=?").get(userId)) });
+    const developmentVerificationUrl=await createAccountToken(userId,"verify",req);
+    res.status(201).json({pendingVerification:true,message:"Bitte bestätige deine E-Mail-Adresse über den Link, den wir dir gesendet haben.",...(developmentVerificationUrl?{developmentVerificationUrl}:{})});
   } catch (error) {
     if (String(error.message).includes("UNIQUE")) return res.status(409).json({ error: "E-Mail oder Benutzername ist bereits vergeben." });
     console.error("Registrierung fehlgeschlagen:", error.message);
@@ -257,9 +258,38 @@ app.post("/api/auth/login", async (req,res) => {
     const actual = await scrypt(password,saltHex ? Buffer.from(saltHex,"hex") : "",64,{N:16384,r:8,p:1,maxmem:64*1024*1024});
     const expected = Buffer.from(hashHex || "", "hex");
     if (actual.length !== expected.length || !crypto.timingSafeEqual(actual,expected)) return res.status(401).json({ error: "Anmeldedaten stimmen nicht oder das Konto ist gesperrt." });
+    if (!user.email_verified) return res.status(403).json({error:"Bitte bestätige zuerst deine E-Mail-Adresse.",code:"EMAIL_UNVERIFIED"});
     setSession(res,user.id);
     res.json({ user: publicUser(user) });
   } catch { res.status(401).json({ error: "Anmeldedaten stimmen nicht oder das Konto ist gesperrt." }); }
+});
+app.post("/api/auth/verify", (req,res) => {
+  const token=clean(req.body?.token,200);
+  const row=db.prepare("SELECT id,user_id FROM account_tokens WHERE token_hash=? AND kind='verify' AND expires_at>?").get(tokenHash(token),Date.now());
+  if(!row)return res.status(400).json({error:"Der Bestätigungslink ist ungültig oder abgelaufen."});
+  db.transaction(()=>{db.prepare("UPDATE users SET email_verified=1 WHERE id=?").run(row.user_id);db.prepare("DELETE FROM account_tokens WHERE user_id=? AND kind='verify'").run(row.user_id);})();
+  res.json({ok:true,message:"E-Mail bestätigt. Du kannst dich jetzt anmelden."});
+});
+app.post("/api/auth/resend-verification", async (req,res) => {
+  const user=db.prepare("SELECT id,email_verified FROM users WHERE email=?").get(emailClean(req.body?.email));
+  if(user&&!user.email_verified){try{const url=await createAccountToken(user.id,"verify",req);return res.json({ok:true,message:"Bestätigungslink wurde erstellt.",...(url?{developmentVerificationUrl:url}:{})});}catch(error){console.error("Verification email:",error.message);return res.status(503).json({error:"E-Mail-Versand nicht verfügbar."});}}
+  res.json({ok:true,message:"Falls ein unbestätigtes Konto existiert, wurde ein Link versendet."});
+});
+app.post("/api/auth/forgot-password", async (req,res) => {
+  const email=emailClean(req.body?.email);
+  if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))return res.status(400).json({error:"Bitte gib eine gültige E-Mail-Adresse ein."});
+  const user=db.prepare("SELECT id FROM users WHERE email=? AND email_verified=1 AND banned=0").get(email);
+  if(user){try{const url=await createAccountToken(user.id,"reset",req);return res.json({ok:true,message:"Falls ein bestätigtes Konto zu dieser E-Mail gehört, wurde ein Link versendet.",...(url?{developmentResetUrl:url}:{})});}catch(error){console.error("Reset email:",error.message);return res.status(503).json({error:"E-Mail-Versand nicht verfügbar."});}}
+  res.json({ok:true,message:"Falls ein bestätigtes Konto zu dieser E-Mail gehört, wurde ein Link versendet."});
+});
+app.post("/api/auth/reset-password", async (req,res) => {
+  const token=clean(req.body?.token,200),password=String(req.body?.password||"");
+  if(password.length<10||password.length>128)return res.status(400).json({error:"Das neue Passwort muss 10–128 Zeichen lang sein."});
+  const row=db.prepare("SELECT id,user_id FROM account_tokens WHERE token_hash=? AND kind='reset' AND expires_at>?").get(tokenHash(token),Date.now());
+  if(!row)return res.status(400).json({error:"Der Reset-Link ist ungültig oder abgelaufen."});
+  const salt=crypto.randomBytes(16),derived=await scrypt(password,salt,64,{N:16384,r:8,p:1,maxmem:64*1024*1024});
+  db.transaction(()=>{db.prepare("UPDATE users SET password_hash=? WHERE id=?").run(salt.toString("hex")+":"+derived.toString("hex"),row.user_id);db.prepare("DELETE FROM account_tokens WHERE user_id=? AND kind='reset'").run(row.user_id);db.prepare("DELETE FROM sessions WHERE user_id=?").run(row.user_id);})();
+  res.json({ok:true,message:"Passwort geändert. Du kannst dich jetzt anmelden."});
 });
 app.post("/api/auth/logout", (req,res) => { clearSession(req,res); res.json({ ok:true }); });
 app.get("/api/auth/me", requireAuth, (req,res) => res.json({ user: req.user }));
@@ -272,10 +302,37 @@ app.patch("/api/profile", requireAuth, (req,res) => {
   db.prepare("UPDATE users SET display_name=?,avatar_color=? WHERE id=?").run(displayName,avatarColor,req.user.id);
   res.json({ user: publicUser(db.prepare("SELECT * FROM users WHERE id=?").get(req.user.id)) });
 });
+app.post("/api/profile/avatar", requireAuth, (req,res) => {
+  const avatarUpload=multer({storage:multer.diskStorage({destination:(_req,_file,cb)=>cb(null,uploadDir),filename:(_req,_file,cb)=>cb(null,"avatar-"+crypto.randomUUID())}),limits:{fileSize:2*1024*1024,files:1},fileFilter:(_req,file,cb)=>cb(null,avatarMimes.has(file.mimetype))}).single("avatar");
+  avatarUpload(req,res,err=>{
+    if(err)return res.status(400).json({error:err.code==="LIMIT_FILE_SIZE"?"Avatar darf höchstens 2 MB groß sein.":"Erlaubt sind JPEG, PNG und WebP."});
+    if(!req.file)return res.status(400).json({error:"Bitte wähle ein JPEG-, PNG- oder WebP-Bild aus."});
+    try{
+      const head=Buffer.alloc(16),fd=fs.openSync(req.file.path,"r");const n=fs.readSync(fd,head,0,16,0);fs.closeSync(fd);
+      const b=head.subarray(0,n);
+      const valid=(req.file.mimetype==="image/jpeg"&&b[0]===255&&b[1]===216&&b[2]===255)||(req.file.mimetype==="image/png"&&b.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))||(req.file.mimetype==="image/webp"&&b.toString("ascii",0,4)==="RIFF"&&b.toString("ascii",8,12)==="WEBP");
+      if(!valid){fs.unlink(req.file.path,()=>{});return res.status(400).json({error:"Der Dateiinhalt passt nicht zum Bildformat."});}
+      const previous=db.prepare("SELECT avatar_url FROM users WHERE id=?").get(req.user.id)?.avatar_url;
+      const avatarUrl="/api/avatars/"+path.basename(req.file.filename);
+      db.prepare("UPDATE users SET avatar_url=? WHERE id=?").run(avatarUrl,req.user.id);
+      if(previous&&previous.startsWith("/api/avatars/"))fs.unlink(path.join(uploadDir,path.basename(previous)),()=>{});
+      res.json({user:publicUser(db.prepare("SELECT * FROM users WHERE id=?").get(req.user.id))});
+    }catch(error){fs.unlink(req.file.path,()=>{});console.error("Avatar upload:",error.message);res.status(500).json({error:"Avatar konnte nicht gespeichert werden."});}
+  });
+});
+app.get("/api/avatars/:name", requireAuth, (req,res)=>{
+  const name=clean(req.params.name,100);
+  if(!/^avatar-[0-9a-f-]{36}$/.test(name))return res.status(404).end();
+  if(!db.prepare("SELECT 1 FROM users WHERE avatar_url=?").get("/api/avatars/"+name))return res.status(404).end();
+  const file=path.join(uploadDir,name);if(!fs.existsSync(file))return res.status(404).end();
+  const fd=fs.openSync(file,"r"),head=Buffer.alloc(12);fs.readSync(fd,head,0,12,0);fs.closeSync(fd);
+  const mime=head[0]===255&&head[1]===216?"image/jpeg":head.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))?"image/png":head.toString("ascii",8,12)==="WEBP"?"image/webp":"application/octet-stream";
+  res.setHeader("Content-Security-Policy","default-src 'none'; sandbox");res.setHeader("X-Content-Type-Options","nosniff");res.type(mime);res.sendFile(file);
+});
 app.get("/api/users", requireAuth, (req,res) => {
   const q = clean(req.query.q,32).toLowerCase();
   if (q.length < 2) return res.json({ users: [] });
-  const users = db.prepare("SELECT id,username,display_name,avatar_color,role FROM users WHERE banned=0 AND id<>? AND (username LIKE ? OR display_name LIKE ?) ORDER BY username LIMIT 20")
+  const users = db.prepare("SELECT id,username,display_name,avatar_color,role FROM users WHERE banned=0 AND email_verified=1 AND id<>? AND (username LIKE ? OR display_name LIKE ?) ORDER BY username LIMIT 20")
     .all(req.user.id,"%"+q+"%","%"+q+"%").map(publicUser);
   res.json({ users });
 });
@@ -290,7 +347,7 @@ app.post("/api/conversations", requireAuth, (req,res) => {
   if (kind === "direct" && memberIds.length !== 2) return res.status(400).json({ error: "Für einen Direktchat wähle genau eine andere Person." });
   if (kind === "group" && memberIds.length < 2) return res.status(400).json({ error: "Eine Gruppe braucht mindestens eine weitere Person." });
   if (kind === "group" && memberIds.length > 20) return res.status(400).json({ error: "Eine Gruppe darf maximal 20 Mitglieder haben." });
-  const users = db.prepare("SELECT id FROM users WHERE banned=0 AND id IN ("+memberIds.map(()=>"?").join(",")+")").all(...memberIds);
+  const users = db.prepare("SELECT id FROM users WHERE banned=0 AND email_verified=1 AND id IN ("+memberIds.map(()=>"?").join(",")+")").all(...memberIds);
   if (users.length !== memberIds.length) return res.status(400).json({ error: "Mindestens ein Konto ist nicht verfügbar." });
   if (kind === "direct") {
     const existing = db.prepare(`SELECT c.id FROM conversations c
