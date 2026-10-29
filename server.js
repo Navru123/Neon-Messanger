@@ -77,6 +77,8 @@ db.exec(`
 const userColumns = new Set(db.prepare("PRAGMA table_info(users)").all().map(column => column.name));
 if (!userColumns.has("avatar_url")) db.exec("ALTER TABLE users ADD COLUMN avatar_url TEXT");
 if (!userColumns.has("email_verified")) db.exec("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1");
+// NEON accounts no longer require email verification.
+db.exec("UPDATE users SET email_verified=1 WHERE email_verified=0");
 
 // Promote the configured owner account on startup, including accounts created before ADMIN_EMAIL was set.
 const configuredAdminEmail = String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
@@ -240,7 +242,6 @@ function broadcastUsers(code) { io.to(code).emit("room-users", getRoomUsers(code
 
 app.get("/api/health", (_req,res) => res.json({ ok: true }));
 app.post("/api/auth/register", async (req,res) => {
-  if (process.env.NODE_ENV === "production" && (!EMAIL_READY || !process.env.PUBLIC_URL)) return res.status(503).json({error:"Registrierung ist noch nicht verfügbar: E-Mail-Versand (RESEND_API_KEY + SMTP_FROM) und PUBLIC_URL müssen konfiguriert sein."});
   const email = emailClean(req.body?.email);
   const username = clean(req.body?.username, 24).toLowerCase();
   const displayName = usernameClean(req.body?.displayName || req.body?.username);
@@ -257,10 +258,10 @@ app.post("/api/auth/register", async (req,res) => {
     createdUserId = userId;
     const role = process.env.ADMIN_EMAIL && email === emailClean(process.env.ADMIN_EMAIL) ? "admin" : "user";
     const color = ["#8b7cff","#48c6ef","#f59eae","#55d6a7","#f3b562"][crypto.randomInt(5)];
-    db.prepare("INSERT INTO users(id,email,username,display_name,password_hash,avatar_color,role,created_at,email_verified) VALUES(?,?,?,?,?,?,?,?,0)")
+    db.prepare("INSERT INTO users(id,email,username,display_name,password_hash,avatar_color,role,created_at,email_verified) VALUES(?,?,?,?,?,?,?,?,1)")
       .run(userId,email,username,displayName,salt.toString("hex")+":"+derived.toString("hex"),color,role,Date.now());
-    const developmentVerificationUrl=await createAccountToken(userId,"verify",req);
-    res.status(201).json({pendingVerification:true,message:"Bitte bestätige deine E-Mail-Adresse über den Link, den wir dir gesendet haben.",...(developmentVerificationUrl?{developmentVerificationUrl}:{})});
+    setSession(res,userId);
+    res.status(201).json({user:publicUser(db.prepare("SELECT * FROM users WHERE id=?").get(userId))});
   } catch (error) {
     if (createdUserId) {
       try { db.transaction(() => { db.prepare("DELETE FROM account_tokens WHERE user_id=?").run(createdUserId); db.prepare("DELETE FROM users WHERE id=? AND email_verified=0").run(createdUserId); })(); } catch {}
@@ -280,7 +281,6 @@ app.post("/api/auth/login", async (req,res) => {
     const actual = await scrypt(password,saltHex ? Buffer.from(saltHex,"hex") : "",64,{N:16384,r:8,p:1,maxmem:64*1024*1024});
     const expected = Buffer.from(hashHex || "", "hex");
     if (actual.length !== expected.length || !crypto.timingSafeEqual(actual,expected)) return res.status(401).json({ error: "Anmeldedaten stimmen nicht oder das Konto ist gesperrt." });
-    if (!user.email_verified) return res.status(403).json({error:"Bitte bestätige zuerst deine E-Mail-Adresse.",code:"EMAIL_UNVERIFIED"});
     setSession(res,user.id);
     res.json({ user: publicUser(user) });
   } catch { res.status(401).json({ error: "Anmeldedaten stimmen nicht oder das Konto ist gesperrt." }); }
