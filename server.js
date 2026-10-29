@@ -108,7 +108,9 @@ const sessionSecret = COOKIE_SECRET.length >= 32 ? COOKIE_SECRET : crypto.random
 const allowedMimes = new Set(["image/jpeg","image/png","image/gif","image/webp","application/pdf","text/plain"]);
 const avatarMimes = new Set(["image/jpeg","image/png","image/webp"]);
 const SMTP_READY = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS && process.env.SMTP_FROM);
-const mailer = SMTP_READY ? nodemailer.createTransport({host:process.env.SMTP_HOST,port:Number(process.env.SMTP_PORT||587),secure:String(process.env.SMTP_SECURE||"false")==="true",auth:{user:process.env.SMTP_USER,pass:process.env.SMTP_PASS}}) : null;
+const RESEND_READY = !!(process.env.RESEND_API_KEY && process.env.SMTP_FROM);
+const EMAIL_READY = SMTP_READY || RESEND_READY;
+const mailer = SMTP_READY ? nodemailer.createTransport({host:process.env.SMTP_HOST,port:Number(process.env.SMTP_PORT||587),secure:String(process.env.SMTP_SECURE||"false")==="true",auth:{user:process.env.SMTP_USER,pass:process.env.SMTP_PASS},connectionTimeout:10000,greetingTimeout:10000,socketTimeout:15000}) : null;
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, uploadDir),
@@ -180,7 +182,7 @@ function publicBaseUrl(req) {
   return req.protocol + "://" + req.get("host");
 }
 async function createAccountToken(userId, kind, req) {
-  if (!mailer && process.env.NODE_ENV === "production") throw new Error("SMTP nicht konfiguriert.");
+  if (!EMAIL_READY && process.env.NODE_ENV === "production") throw new Error("E-Mail-Versand nicht konfiguriert. RESEND_API_KEY und SMTP_FROM setzen.");
   const token=crypto.randomBytes(32).toString("base64url"), now=Date.now();
   const ttl=kind==="verify" ? 24*60*60*1000 : 60*60*1000;
   db.prepare("DELETE FROM account_tokens WHERE user_id=? AND kind=?").run(userId,kind);
@@ -188,9 +190,18 @@ async function createAccountToken(userId, kind, req) {
   const url=publicBaseUrl(req)+(kind==="verify" ? "/?verify=" : "/?reset=")+encodeURIComponent(token);
   const label=kind==="verify" ? "E-Mail-Adresse bestätigen" : "Passwort zurücksetzen";
   const email=db.prepare("SELECT email FROM users WHERE id=?").get(userId).email;
-  if (mailer) {
-    try { await mailer.sendMail({from:process.env.SMTP_FROM,to:email,subject:"NEON Messenger – "+label,text:label+": "+url,html:'<p>'+label+'</p><p><a href="'+url+'">'+label+'</a></p><p>Der Link läuft in '+(kind==="verify"?"24 Stunden.":"1 Stunde.")+'</p>'}); }
-    catch(error) { db.prepare("DELETE FROM account_tokens WHERE user_id=? AND kind=?").run(userId,kind); throw error; }
+  if (EMAIL_READY) {
+    try {
+      const subject = "NEON Messenger – " + label;
+      const text = label + ": " + url;
+      const html = '<p>' + label + '</p><p><a href="' + url + '">' + label + '</a></p><p>Der Link läuft in ' + (kind === "verify" ? "24 Stunden." : "1 Stunde.") + '</p>';
+      if (RESEND_READY) {
+        const response = await fetch("https://api.resend.com/emails", {method:"POST",headers:{"Authorization":"Bearer "+process.env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from:process.env.SMTP_FROM,to:[email],subject,text,html}),signal:AbortSignal.timeout(15000)});
+        if (!response.ok) throw new Error("Resend API Fehler (" + response.status + "): " + (await response.text()).slice(0,300));
+      } else {
+        await mailer.sendMail({from:process.env.SMTP_FROM,to:email,subject,text,html});
+      }
+    } catch(error) { db.prepare("DELETE FROM account_tokens WHERE user_id=? AND kind=?").run(userId,kind); throw error; }
   } else {
     console.warn("Entwicklungslink ("+kind+"): "+url);
     return url;
@@ -229,7 +240,7 @@ function broadcastUsers(code) { io.to(code).emit("room-users", getRoomUsers(code
 
 app.get("/api/health", (_req,res) => res.json({ ok: true }));
 app.post("/api/auth/register", async (req,res) => {
-  if (process.env.NODE_ENV === "production" && (!SMTP_READY || !process.env.PUBLIC_URL)) return res.status(503).json({error:"Registrierung ist noch nicht verfügbar: SMTP und PUBLIC_URL müssen konfiguriert sein."});
+  if (process.env.NODE_ENV === "production" && (!EMAIL_READY || !process.env.PUBLIC_URL)) return res.status(503).json({error:"Registrierung ist noch nicht verfügbar: E-Mail-Versand (RESEND_API_KEY + SMTP_FROM) und PUBLIC_URL müssen konfiguriert sein."});
   const email = emailClean(req.body?.email);
   const username = clean(req.body?.username, 24).toLowerCase();
   const displayName = usernameClean(req.body?.displayName || req.body?.username);
@@ -238,10 +249,12 @@ app.post("/api/auth/register", async (req,res) => {
   if (!/^[a-z0-9_]{3,24}$/.test(username)) return res.status(400).json({ error: "Benutzername: 3–24 Zeichen, nur Buchstaben, Zahlen und _." });
   if (password.length < 10 || password.length > 128) return res.status(400).json({ error: "Das Passwort muss 10 bis 128 Zeichen lang sein." });
   if (db.prepare("SELECT 1 FROM users WHERE email=? OR username=?").get(email,username)) return res.status(409).json({ error: "E-Mail oder Benutzername ist bereits vergeben." });
+  let createdUserId = null;
   try {
     const salt = crypto.randomBytes(16);
     const derived = await scrypt(password, salt, 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
     const userId = id();
+    createdUserId = userId;
     const role = process.env.ADMIN_EMAIL && email === emailClean(process.env.ADMIN_EMAIL) ? "admin" : "user";
     const color = ["#8b7cff","#48c6ef","#f59eae","#55d6a7","#f3b562"][crypto.randomInt(5)];
     db.prepare("INSERT INTO users(id,email,username,display_name,password_hash,avatar_color,role,created_at,email_verified) VALUES(?,?,?,?,?,?,?,?,0)")
@@ -249,9 +262,12 @@ app.post("/api/auth/register", async (req,res) => {
     const developmentVerificationUrl=await createAccountToken(userId,"verify",req);
     res.status(201).json({pendingVerification:true,message:"Bitte bestätige deine E-Mail-Adresse über den Link, den wir dir gesendet haben.",...(developmentVerificationUrl?{developmentVerificationUrl}:{})});
   } catch (error) {
+    if (createdUserId) {
+      try { db.transaction(() => { db.prepare("DELETE FROM account_tokens WHERE user_id=?").run(createdUserId); db.prepare("DELETE FROM users WHERE id=? AND email_verified=0").run(createdUserId); })(); } catch {}
+    }
     if (String(error.message).includes("UNIQUE")) return res.status(409).json({ error: "E-Mail oder Benutzername ist bereits vergeben." });
     console.error("Registrierung fehlgeschlagen:", error.message);
-    res.status(500).json({ error: "Registrierung fehlgeschlagen." });
+    res.status(503).json({ error: "Konto wurde nicht erstellt, weil die Bestätigungs-E-Mail nicht gesendet werden konnte. Bitte versuche es später erneut." });
   }
 });
 app.post("/api/auth/login", async (req,res) => {
