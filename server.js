@@ -78,6 +78,12 @@ const userColumns = new Set(db.prepare("PRAGMA table_info(users)").all().map(col
 if (!userColumns.has("avatar_url")) db.exec("ALTER TABLE users ADD COLUMN avatar_url TEXT");
 if (!userColumns.has("email_verified")) db.exec("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1");
 
+// Promote the configured owner account on startup, including accounts created before ADMIN_EMAIL was set.
+const configuredAdminEmail = String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+if (configuredAdminEmail) {
+  db.prepare("UPDATE users SET role = 'admin' WHERE lower(email) = ?").run(configuredAdminEmail);
+}
+
 app.disable("x-powered-by");
 app.set("trust proxy", process.env.NODE_ENV === "production" ? 1 : false);
 app.use(helmet({
