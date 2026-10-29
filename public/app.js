@@ -6,7 +6,7 @@ const state = {
   roomCode: "", roomMessages: [], roomUsers: [], accountAction: null, accountToken: null
 };
 const COLORS = ["#8b7cff","#48c6ef","#f59eae","#55d6a7","#f3b562","#fb7185","#60a5fa"];
-const views = ["welcomeView","chatView","peopleView","profileView","adminView"];
+const views = ["welcomeView","chatView","peopleView","eventsView","profileView","adminView"];
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -141,9 +141,9 @@ function renderUserProfile() {
 function showView(view) {
   document.querySelectorAll(".rail-button").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
   if (window.matchMedia("(max-width: 650px)").matches) {
-    $("chatListPanel").classList.toggle("compact-hidden",["chat","rooms","people","profile","admin"].includes(view));
+    $("chatListPanel").classList.toggle("compact-hidden",["chat","rooms","people","events","profile","admin"].includes(view));
     $("contentArea").classList.toggle("show-chat",view==="chat");
-    $("contentArea").classList.toggle("show-utility",["rooms","people","profile","admin"].includes(view));
+    $("contentArea").classList.toggle("show-utility",["rooms","people","events","profile","admin"].includes(view));
   }
   views.forEach(id=>$(id).classList.add("hidden"));
   if(view==="chats") {
@@ -154,6 +154,7 @@ function showView(view) {
     $("welcomeView").classList.add("hidden");$("chatView").classList.remove("hidden");
   } else if(view==="rooms") $("roomsView").classList.remove("hidden");
   else if(view==="people") $("peopleView").classList.remove("hidden");
+  else if(view==="events") { $("eventsView").classList.remove("hidden"); loadEvents(); }
   else if(view==="profile") $("profileView").classList.remove("hidden");
   else if(view==="admin") { $("adminView").classList.remove("hidden"); loadAdmin(); }
 }
@@ -386,9 +387,37 @@ async function loadAdmin() {
     container.innerHTML='<section class="admin-section"><h3>Meldungen ('+(data.reports||[]).filter(r=>r.status==="open").length+' offen)</h3>'+(reports||'<p class="muted-copy" style="padding:16px">Keine Meldungen vorhanden.</p>')+'</section><section class="admin-section"><h3>Konten ('+(data.users||[]).length+')</h3>'+(users||'<p class="muted-copy" style="padding:16px">Keine Konten vorhanden.</p>')+'</section>';
   }catch(error){container.innerHTML='<p class="form-error">'+escapeHtml(error.message)+'</p>';}
 }
+function formatEventDate(value) {
+  return new Date(Number(value)).toLocaleString("de-DE",{weekday:"short",day:"2-digit",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"});
+}
+async function loadEvents() {
+  const container=$("eventsList");
+  if(state.user?.role==="admin") $("eventForm").classList.remove("hidden");
+  else $("eventForm").classList.add("hidden");
+  container.innerHTML='<p class="muted-copy">Events werden geladen …</p>';
+  try {
+    const data=await api("/api/events");
+    const events=data.events||[];
+    container.innerHTML='<section class="admin-section"><h3>Kommende Events ('+events.length+')</h3>'+
+      (events.length?events.map(e=>'<article class="admin-item"><div class="admin-item-main"><b>'+escapeHtml(e.title)+'</b><p>'+escapeHtml(formatEventDate(e.startsAt))+'</p>'+(e.location?'<p>📍 '+escapeHtml(e.location)+'</p>':'')+(e.description?'<p>'+escapeHtml(e.description)+'</p>':'')+'<small>Veranstaltet von @'+escapeHtml(e.host)+'</small></div>'+(state.user?.role==="admin"?'<div class="admin-actions"><button class="button button-secondary" data-event-cancel="'+escapeHtml(e.id)+'">Event absagen</button></div>':'')+'</article>').join(""):'<p class="muted-copy" style="padding:16px">Noch keine kommenden Events. Schau später wieder vorbei.</p>')+'</section>';
+  } catch(error) {container.innerHTML='<p class="form-error">'+escapeHtml(error.message)+'</p>';}
+}
+async function createEvent(event) {
+  event.preventDefault(); showError("eventError","");
+  const button=$("eventForm").querySelector('button[type="submit"]');button.disabled=true;
+  try {
+    await api("/api/admin/events",{method:"POST",body:JSON.stringify({
+      title:$("eventTitle").value.trim(),description:$("eventDescription").value.trim(),
+      location:$("eventLocation").value.trim(),startsAt:$("eventDate").value
+    })});
+    $("eventForm").reset();showToast("Event veröffentlicht.");await loadEvents();
+  } catch(error) {showError("eventError",error.message);}
+  finally {button.disabled=false;}
+}
 async function adminAction(button) {
   try{
-    if(button.dataset.resolve){await api("/api/admin/reports/"+encodeURIComponent(button.dataset.resolve)+"/resolve",{method:"POST",body:JSON.stringify({})});showToast("Meldung erledigt.");}
+    if(button.dataset.eventCancel){if(!confirm("Dieses Event wirklich absagen?"))return;await api("/api/admin/events/"+encodeURIComponent(button.dataset.eventCancel),{method:"DELETE"});showToast("Event abgesagt.");await loadEvents();}
+    else if(button.dataset.resolve){await api("/api/admin/reports/"+encodeURIComponent(button.dataset.resolve)+"/resolve",{method:"POST",body:JSON.stringify({})});showToast("Meldung erledigt.");}
     else if(button.dataset.adminDelete){if(!confirm("Diese Nachricht wirklich entfernen?"))return;await api("/api/admin/messages/"+encodeURIComponent(button.dataset.adminDelete),{method:"DELETE"});showToast("Nachricht entfernt.");}
     else if(button.dataset.ban){if(!confirm("Dieses Konto sperren? Die Person wird abgemeldet."))return;await api("/api/admin/users/"+encodeURIComponent(button.dataset.ban)+"/ban",{method:"POST",body:JSON.stringify({})});showToast("Konto gesperrt.");}
     await loadAdmin();
@@ -460,6 +489,8 @@ document.querySelectorAll(".color-option").forEach(b=>b.addEventListener("click"
 }));
 $("logoutBtn").addEventListener("click",()=>logout());
 $("adminContent").addEventListener("click",e=>{const b=e.target.closest("[data-resolve],[data-admin-delete],[data-ban]");if(b)adminAction(b);});
+$("eventsList").addEventListener("click",e=>{const b=e.target.closest("[data-event-cancel]");if(b)adminAction(b);});
+$("eventForm").addEventListener("submit",createEvent);
 window.addEventListener("resize",()=>{if(!state.activeConversation&&!$("welcomeView").classList.contains("hidden"))showView("chats");});
 
 async function boot() {
