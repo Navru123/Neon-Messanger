@@ -155,8 +155,15 @@ function sessionUser(req) {
   return row;
 }
 function requireAuth(req, res, next) {
-  const user = sessionUser(req);
+  let user = sessionUser(req);
   if (!user) return res.status(401).json({ error: "Bitte melde dich erneut an." });
+  // Re-check the configured owner account on every authenticated request so an
+  // existing account gets admin access even if startup promotion was missed.
+  const ownerEmail = String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+  if (ownerEmail && String(user.email || "").trim().toLowerCase() === ownerEmail && user.role !== "admin") {
+    db.prepare("UPDATE users SET role='admin' WHERE id=?").run(user.id);
+    user = sessionUser(req);
+  }
   req.user = user;
   next();
 }
