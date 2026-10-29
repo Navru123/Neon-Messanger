@@ -114,6 +114,8 @@ function connectSocket() {
     updateConversationPreview(payload.conversationId,payload.message);
   });
   state.socket.on("conversation-activity",payload=>updateConversationActivity(payload));
+  // Show newly created conversations immediately when someone starts a chat with this user.
+  state.socket.on("conversation-updated",()=>refreshConversations());
   state.socket.on("message-removed",payload=>{
     if (state.activeConversation?.id===payload.conversationId) {
       state.messages=state.messages.filter(m=>m.id!==payload.messageId); renderMessages();
@@ -176,7 +178,8 @@ function renderConversationList() {
   list.innerHTML=rows.map(c=>{
     const active=state.activeConversation?.id===c.id;
     const title=c.kind==="group"?c.title:(c.title||"Direktchat");
-    const preview=c.lastMessage ? ((c.lastMessage.sender===state.user.username?"Du: ":c.lastMessage.sender+": ")+(c.lastMessage.body||"Datei")) : (c.kind==="group"?"Gruppe · "+c.members.length+" Mitglieder":"Noch keine Nachrichten");
+    const incoming=!!c.lastMessage && c.lastMessage.sender!==state.user.username;
+    const preview=c.lastMessage ? (incoming ? "Neue Nachricht von @"+c.lastMessage.sender+": " : (c.lastMessage.sender===state.user.username?"Du: ":"@"+c.lastMessage.sender+": "))+(c.lastMessage.body||"Datei") : (c.kind==="group"?"Gruppe · "+c.members.length+" Mitglieder":"Noch keine Nachrichten");
     return '<button class="conversation-item '+(active?"active":"")+'" data-conversation="'+escapeHtml(c.id)+'">'+
       avatarMarkup(c.kind==="group"?{displayName:title,avatarColor:"#a998ff"}:(c.members.find(m=>m.id!==state.user.id)||{displayName:title,avatarColor:"#8b7cff"}))+
       '<span class="conversation-copy"><span class="conversation-top"><b>'+escapeHtml(title)+'</b><time>'+escapeHtml(shortTime(c.lastMessage?.time))+'</time></span><span class="conversation-preview">'+escapeHtml(preview)+'</span></span></button>';
