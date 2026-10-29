@@ -72,6 +72,12 @@ db.exec(`
     reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at INTEGER NOT NULL,
     reviewed_by TEXT REFERENCES users(id), reviewed_at INTEGER
   );
+  CREATE TABLE IF NOT EXISTS events (
+    id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+    location TEXT NOT NULL DEFAULT '', starts_at INTEGER NOT NULL,
+    created_by TEXT NOT NULL REFERENCES users(id), created_at INTEGER NOT NULL,
+    cancelled INTEGER NOT NULL DEFAULT 0
+  );
 `);
 
 const userColumns = new Set(db.prepare("PRAGMA table_info(users)").all().map(column => column.name));
@@ -495,6 +501,24 @@ app.post("/api/admin/users/:id/ban", requireAuth, requireAdmin, (req,res) => {
   db.prepare("DELETE FROM sessions WHERE user_id=?").run(target);
   for (const s of io.sockets.sockets.values()) if (s.data.userId===target) s.disconnect(true);
   res.json({ ok:true });
+});
+app.get("/api/events", requireAuth, (_req,res) => {
+  res.json({events:db.prepare(`SELECT e.id,e.title,e.description,e.location,e.starts_at AS startsAt,e.created_at AS createdAt,e.created_by AS createdBy,u.username AS host
+    FROM events e JOIN users u ON u.id=e.created_by WHERE e.cancelled=0 AND e.starts_at>=? ORDER BY e.starts_at ASC LIMIT 100`).all(Date.now())});
+});
+app.post("/api/admin/events", requireAuth, requireAdmin, (req,res) => {
+  const title=clean(req.body?.title,80), description=clean(req.body?.description,1000), location=clean(req.body?.location,120);
+  const startsAt=Date.parse(String(req.body?.startsAt||""));
+  if(title.length<3) return res.status(400).json({error:"Der Event-Titel muss mindestens 3 Zeichen haben."});
+  if(!Number.isFinite(startsAt)||startsAt<=Date.now()) return res.status(400).json({error:"Bitte wähle ein Datum in der Zukunft."});
+  const eventId=id(), now=Date.now();
+  db.prepare("INSERT INTO events(id,title,description,location,starts_at,created_by,created_at) VALUES(?,?,?,?,?,?,?)").run(eventId,title,description,location,startsAt,req.user.id,now);
+  res.status(201).json({ok:true,id:eventId});
+});
+app.delete("/api/admin/events/:id", requireAuth, requireAdmin, (req,res) => {
+  const result=db.prepare("UPDATE events SET cancelled=1 WHERE id=?").run(clean(req.params.id,64));
+  if(!result.changes) return res.status(404).json({error:"Event nicht gefunden."});
+  res.json({ok:true});
 });
 app.use(express.static(path.join(__dirname,"public"),{ etag:true, maxAge:process.env.NODE_ENV==="production"?"1h":0 }));
 
