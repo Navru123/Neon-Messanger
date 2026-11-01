@@ -5,14 +5,13 @@
   "description": "NEON Messenger — realtime private and group messaging",
   "engines": { "node": ">=20" },
   "scripts": {
-    "start": "node server.js",
-    "check": "node --check server.js && node --check public/app.js && node --check scripts/integration-smoke.js"
+    "start": "node startup-fix.js",
+    "check": "node --check server.js && node --check startup-fix.js && node --check public/app.js && node --check scripts/integration-smoke.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
-    "helmet": "^8.0.0",
     "multer": "^2.5.0",
     "nodemailer": "^10.2.1",
     "socket.io": "^4.8.1"
