@@ -78,6 +78,10 @@ db.exec(`
     created_by TEXT NOT NULL REFERENCES users(id), created_at INTEGER NOT NULL,
     cancelled INTEGER NOT NULL DEFAULT 0
   );
+  CREATE TABLE IF NOT EXISTS live_broadcasts (
+    id INTEGER PRIMARY KEY CHECK(id=1), title TEXT NOT NULL, message TEXT NOT NULL,
+    created_by TEXT NOT NULL REFERENCES users(id), created_at INTEGER NOT NULL
+  );
 `);
 
 const userColumns = new Set(db.prepare("PRAGMA table_info(users)").all().map(column => column.name));
@@ -477,6 +481,7 @@ app.post("/api/messages/:id/report", requireAuth, (req,res) => {
 });
 app.get("/api/admin/overview", requireAuth, requireAdmin, (_req,res) => {
   res.json({
+    broadcast: db.prepare("SELECT title,message,created_at AS createdAt FROM live_broadcasts WHERE id=1").get() || null,
     users:db.prepare("SELECT id,username,display_name AS displayName,email,role,banned,created_at AS createdAt FROM users ORDER BY created_at DESC LIMIT 200").all(),
     reports:db.prepare(`SELECT r.id,r.reason,r.status,r.created_at AS createdAt,r.message_id AS messageId,
       reporter.username AS reporter, m.body, author.username AS author
@@ -484,6 +489,22 @@ app.get("/api/admin/overview", requireAuth, requireAdmin, (_req,res) => {
       LEFT JOIN chat_messages m ON m.id=r.message_id LEFT JOIN users author ON author.id=m.sender_id
       ORDER BY CASE r.status WHEN 'open' THEN 0 ELSE 1 END,r.created_at DESC LIMIT 200`).all()
   });
+});
+app.post("/api/admin/broadcast", requireAuth, requireAdmin, (req,res) => {
+  const title = clean(req.body?.title, 100);
+  const message = String(req.body?.message ?? "").normalize("NFKC").replace(/\\u0000/g, "").trim().slice(0, 8000);
+  if (!message) return res.status(400).json({ error: "Bitte schreibe eine Nachricht." });
+  const createdAt = Date.now();
+  db.prepare("INSERT INTO live_broadcasts(id,title,message,created_by,created_at) VALUES(1,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,message=excluded.message,created_by=excluded.created_by,created_at=excluded.created_at")
+    .run(title || "Mitteilung von NEON", message, req.user.id, createdAt);
+  const broadcast = { title: title || "Mitteilung von NEON", message, createdAt, by: "NEON Administration" };
+  io.emit("live-broadcast", broadcast);
+  res.status(201).json({ ok: true, broadcast });
+});
+app.delete("/api/admin/broadcast", requireAuth, requireAdmin, (_req,res) => {
+  db.prepare("DELETE FROM live_broadcasts WHERE id=1").run();
+  io.emit("live-broadcast-dismiss");
+  res.json({ ok: true });
 });
 app.post("/api/admin/reports/:id/resolve", requireAuth, requireAdmin, (req,res) => {
   db.prepare("UPDATE reports SET status='resolved',reviewed_by=?,reviewed_at=? WHERE id=?").run(req.user.id,Date.now(),clean(req.params.id,64));
@@ -550,6 +571,8 @@ app.get("/api/rooms/:code",(req,res)=>{
 
 io.on("connection",socket=>{
   socket.data.recentMessageTimes=[];
+  const activeBroadcast = db.prepare("SELECT title,message,created_at AS createdAt FROM live_broadcasts WHERE id=1").get();
+  if (activeBroadcast) socket.emit("live-broadcast", { ...activeBroadcast, by: "NEON Administration" });
   const token=cookieValue({headers:{cookie:socket.handshake.headers.cookie||""}});
   if (token) {
     const user=sessionUser({headers:{cookie:socket.handshake.headers.cookie||""}});
