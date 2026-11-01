@@ -123,7 +123,48 @@ function connectSocket() {
     showToast("Eine Nachricht wurde von der Moderation entfernt.");
   });
   state.socket.on("chat-warning",message=>showToast(message));
+  state.socket.on("live-broadcast",showLiveBroadcast);
+  state.socket.on("live-broadcast-dismiss",hideLiveBroadcast);
   state.socket.on("connect_error",()=>showToast("Verbindung wird erneut aufgebaut …"));
+}
+function showLiveBroadcast(broadcast) {
+  if (!broadcast || typeof broadcast.message !== "string") return;
+  $("liveBroadcastTitle").textContent = broadcast.title || "Mitteilung von NEON";
+  $("liveBroadcastMessage").textContent = broadcast.message;
+  $("liveBroadcastBy").textContent = "NEON Administration";
+  $("liveBroadcast").classList.remove("hidden");
+}
+function hideLiveBroadcast() {
+  $("liveBroadcast").classList.add("hidden");
+}
+async function publishLiveBroadcast(event) {
+  event.preventDefault();
+  const form = $("liveBroadcastForm");
+  const button = form.querySelector('button[type="submit"]');
+  button.disabled = true;
+  try {
+    await api("/api/admin/broadcast", { method:"POST", body:JSON.stringify({
+      title:$("liveBroadcastAdminTitle").value.trim(),
+      message:$("liveBroadcastAdminMessage").value
+    }) });
+    showToast("Live-Mitteilung wurde an alle verbundenen NEON-Nutzer gesendet.");
+    await loadAdmin();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+async function stopLiveBroadcast() {
+  if (!confirm("Die Live-Mitteilung für alle Nutzer ausblenden?")) return;
+  try {
+    await api("/api/admin/broadcast", { method:"DELETE" });
+    hideLiveBroadcast();
+    showToast("Live-Mitteilung wurde global ausgeblendet.");
+    await loadAdmin();
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 function renderUserProfile() {
   const user=state.user;if(!user)return;
@@ -387,7 +428,9 @@ async function loadAdmin() {
     const data=await api("/api/admin/overview");
     const reports=(data.reports||[]).map(r=>'<div class="admin-item"><div class="admin-item-main"><b>'+escapeHtml(r.author||"Gelöschter Autor")+' · '+escapeHtml(r.status)+'</b><p>'+escapeHtml(r.body||"[Nachricht nicht verfügbar]")+'</p><p>'+escapeHtml(r.reason)+'</p><small>Gemeldet von '+escapeHtml(r.reporter)+' · '+escapeHtml(shortTime(r.createdAt))+'</small></div><div class="admin-actions">'+(r.messageId?'<button class="button button-secondary" data-admin-delete="'+escapeHtml(r.messageId)+'">Nachricht entfernen</button>':"")+(r.status==="open"?'<button class="button button-primary" data-resolve="'+escapeHtml(r.id)+'">Erledigen</button>':"")+'</div></div>').join("");
     const users=(data.users||[]).map(u=>'<div class="admin-item"><div class="admin-item-main"><b>'+escapeHtml(u.displayName||u.username)+' (@'+escapeHtml(u.username)+')</b><p>'+escapeHtml(u.email)+' · '+escapeHtml(u.role)+(u.banned?" · gesperrt":"")+'</p></div><div class="admin-actions">'+(!u.banned&&u.role!=="admin"?'<button class="button button-secondary" data-ban="'+escapeHtml(u.id)+'">Konto sperren</button>':"")+'</div></div>').join("");
-    container.innerHTML='<section class="admin-section"><h3>Meldungen ('+(data.reports||[]).filter(r=>r.status==="open").length+' offen)</h3>'+(reports||'<p class="muted-copy" style="padding:16px">Keine Meldungen vorhanden.</p>')+'</section><section class="admin-section"><h3>Konten ('+(data.users||[]).length+')</h3>'+(users||'<p class="muted-copy" style="padding:16px">Keine Konten vorhanden.</p>')+'</section>';
+    const activeBroadcast=data.broadcast;
+    const broadcastSection='<section class="admin-section"><h3>📢 Live-Mitteilung an alle</h3><form id="liveBroadcastForm" class="broadcast-admin-form"><label for="liveBroadcastAdminTitle">TITEL (OPTIONAL)</label><input id="liveBroadcastAdminTitle" maxlength="100" placeholder="z. B. Wichtige NEON-Mitteilung"><label for="liveBroadcastAdminMessage">NACHRICHT</label><textarea id="liveBroadcastAdminMessage" maxlength="8000" rows="7" required placeholder="Schreibe hier deine Mitteilung an alle aktuell verbundenen Nutzer …"></textarea><p class="muted-copy">Wird sofort als Overlay auf allen verbundenen NEON-Seiten angezeigt. Nutzer können es lokal schliessen.</p><button class="button button-primary" type="submit">LIVE an alle senden ↗</button></form>'+(activeBroadcast?'<div class="broadcast-active"><b>Aktive Mitteilung</b><p>'+escapeHtml(activeBroadcast.title)+'</p><button type="button" class="button button-secondary" data-broadcast-stop>Global ausblenden</button></div>':'<p class="muted-copy" style="padding:0 16px 16px">Aktuell ist keine Live-Mitteilung aktiv.</p>')+'</section>';
+    container.innerHTML=broadcastSection+'<section class="admin-section"><h3>Meldungen ('+(data.reports||[]).filter(r=>r.status==="open").length+' offen)</h3>'+(reports||'<p class="muted-copy" style="padding:16px">Keine Meldungen vorhanden.</p>')+'</section><section class="admin-section"><h3>Konten ('+(data.users||[]).length+')</h3>'+(users||'<p class="muted-copy" style="padding:16px">Keine Konten vorhanden.</p>')+'</section>';
   }catch(error){container.innerHTML='<p class="form-error">'+escapeHtml(error.message)+'</p>';}
 }
 function formatEventDate(value) {
@@ -419,6 +462,7 @@ async function createEvent(event) {
 }
 async function adminAction(button) {
   try{
+    if(button.dataset.broadcastStop){await stopLiveBroadcast();return;}
     if(button.dataset.eventCancel){if(!confirm("Dieses Event wirklich absagen?"))return;await api("/api/admin/events/"+encodeURIComponent(button.dataset.eventCancel),{method:"DELETE"});showToast("Event abgesagt.");await loadEvents();}
     else if(button.dataset.resolve){await api("/api/admin/reports/"+encodeURIComponent(button.dataset.resolve)+"/resolve",{method:"POST",body:JSON.stringify({})});showToast("Meldung erledigt.");}
     else if(button.dataset.adminDelete){if(!confirm("Diese Nachricht wirklich entfernen?"))return;await api("/api/admin/messages/"+encodeURIComponent(button.dataset.adminDelete),{method:"DELETE"});showToast("Nachricht entfernt.");}
@@ -491,7 +535,9 @@ document.querySelectorAll(".color-option").forEach(b=>b.addEventListener("click"
   $("profileAvatar").style.setProperty("--avatar-color",state.selectedColor);
 }));
 $("logoutBtn").addEventListener("click",()=>logout());
-$("adminContent").addEventListener("click",e=>{const b=e.target.closest("[data-resolve],[data-admin-delete],[data-ban]");if(b)adminAction(b);});
+$("adminContent").addEventListener("click",e=>{const b=e.target.closest("[data-resolve],[data-admin-delete],[data-ban],[data-broadcast-stop]");if(b)adminAction(b);});
+$("adminContent").addEventListener("submit",e=>{if(e.target.id==="liveBroadcastForm")publishLiveBroadcast(e);});
+$("liveBroadcastClose").addEventListener("click",hideLiveBroadcast);
 $("eventsList").addEventListener("click",e=>{const b=e.target.closest("[data-event-cancel]");if(b)adminAction(b);});
 $("eventForm").addEventListener("submit",createEvent);
 window.addEventListener("resize",()=>{if(!state.activeConversation&&!$("welcomeView").classList.contains("hidden"))showView("chats");});
