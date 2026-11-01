@@ -67,6 +67,14 @@
         <section id="adminView" class="utility-view hidden"><span class="kicker">SICHERHEIT & COMMUNITY</span><h2>Moderation</h2><p class="utility-intro">Meldungen prüfen und Konten verwalten. Private Chats sind nicht pauschal für Admins sichtbar; gemeldete Nachrichten können hier geprüft werden.</p><div id="adminContent" class="admin-content"><p class="muted-copy">Moderationsdaten werden geladen …</p></div></section>
       </section>
     </section>
+    <section id="liveBroadcast" class="live-broadcast hidden" role="alert" aria-live="assertive" aria-labelledby="liveBroadcastTitle">
+      <div class="live-broadcast-card">
+        <div class="live-broadcast-top"><span class="live-broadcast-tag"><i></i> NEON LIVE</span><button type="button" id="liveBroadcastClose" class="live-broadcast-close" aria-label="Mitteilung schließen">×</button></div>
+        <h2 id="liveBroadcastTitle">Mitteilung von NEON</h2>
+        <p id="liveBroadcastMessage" class="live-broadcast-message"></p>
+        <div id="liveBroadcastBy" class="live-broadcast-by">NEON Administration</div>
+      </div>
+    </section>
     <div class="toast hidden" id="toast" role="status"></div>
     <dialog id="newChatDialog" class="modal"><form id="newChatForm"><button type="button" class="modal-close" id="closeDialog" aria-label="Schließen">×</button><span class="kicker">NEUES GESPRÄCH</span><h2>Wen möchtest du erreichen?</h2><p>Suche nach einem Benutzernamen, um einen Chat zu beginnen.</p><label class="search-box"><span>⌕</span><input id="dialogSearch" type="search" placeholder="Benutzername …" autocomplete="off"></label><div id="dialogResults" class="dialog-results"></div><div id="groupOptions" class="hidden"><label for="groupTitle">GRUPPENNAME</label><input id="groupTitle" maxlength="48" placeholder="Zum Beispiel: Wochenend-Crew"><p class="modal-help">Wähle mindestens zwei Personen aus, um eine Gruppe zu erstellen.</p></div><p id="dialogError" class="form-error" role="alert"></p><div class="modal-actions"><button type="button" id="groupModeBtn" class="button button-secondary">Gruppe erstellen</button><button type="submit" id="dialogSubmit" class="button button-primary" disabled>Chat starten ↗</button></div></form></dialog>
     <dialog id="infoDialog" class="modal"><form method="dialog"><button class="modal-close" aria-label="Schließen">×</button><span class="kicker">CHAT-INFORMATIONEN</span><h2 id="infoTitle">Chat</h2><p id="infoDescription"></p><div id="infoMembers" class="member-list"></div><button type="button" class="button button-secondary button-wide" id="reportLastMessage">Letzte Nachricht melden</button></form></dialog>
