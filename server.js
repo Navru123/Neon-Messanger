@@ -492,7 +492,7 @@ app.get("/api/admin/overview", requireAuth, requireAdmin, (_req,res) => {
 });
 app.post("/api/admin/broadcast", requireAuth, requireAdmin, (req,res) => {
   const title = clean(req.body?.title, 100);
-  const message = String(req.body?.message ?? "").normalize("NFKC").replace(/\\u0000/g, "").trim().slice(0, 8000);
+  const message = String(req.body?.message ?? "").normalize("NFKC").trim().slice(0, 8000);
   if (!message) return res.status(400).json({ error: "Bitte schreibe eine Nachricht." });
   const createdAt = Date.now();
   db.prepare("INSERT INTO live_broadcasts(id,title,message,created_by,created_at) VALUES(1,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,message=excluded.message,created_by=excluded.created_by,created_at=excluded.created_at")
