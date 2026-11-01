@@ -16,3 +16,25 @@
 @media(max-width:650px){.room-join{flex-direction:column}.legacy-room-header{align-items:flex-start}.legacy-room-header .button{font-size:10px;padding:9px}.legacy-room-meta{align-items:flex-start}.legacy-room-messages{max-height:280px}}
 
 .text-button{border:0;background:transparent;color:var(--accent,#b7a6ff);font:inherit;font-size:11px;cursor:pointer;padding:4px 0}.auth-extra{display:flex;justify-content:space-between;gap:12px;margin:4px 0 12px}.account-action-panel{display:grid;gap:10px;padding:14px;margin:12px 0;border:1px solid var(--line);border-radius:12px;background:#191922}.account-action-panel label{font-size:10px;letter-spacing:1px;color:#aaa5bd}.account-action-panel input{width:100%;padding:11px;border:1px solid #343240;border-radius:10px;background:#201f2a;color:#f4f0ff}.avatar img{width:100%;height:100%;display:block;object-fit:cover;border-radius:inherit}.avatar-upload-label{display:inline-flex;margin-top:8px;font-size:10px;padding:8px 10px;cursor:pointer}
+
+
+/* NEON live broadcast overlay */
+.live-broadcast{position:fixed;z-index:1000;inset:0;display:grid;place-items:center;padding:22px;background:rgba(7,7,13,.78);backdrop-filter:blur(12px)}
+.live-broadcast.hidden{display:none}
+.live-broadcast-card{width:min(720px,100%);max-height:min(82dvh,900px);overflow:auto;padding:clamp(22px,5vw,42px);border:1px solid #62538a;border-radius:24px;background:radial-gradient(ellipse at 85% 0%,#8e7bda25,transparent 48%),#191821;box-shadow:0 28px 110px #000b,0 0 70px #8e7bda18}
+.live-broadcast-top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:26px}
+.live-broadcast-tag{display:inline-flex;align-items:center;gap:9px;color:#c9bbff;font-size:10px;font-weight:900;letter-spacing:1.8px}
+.live-broadcast-tag i{width:8px;height:8px;border-radius:50%;background:#71dfb0;box-shadow:0 0 14px #71dfb0}
+.live-broadcast-close{width:38px;height:38px;border:1px solid #403b50;border-radius:12px;background:#282532;color:#e9e4f7;font-size:25px;cursor:pointer}
+.live-broadcast-card h2{margin:0 0 18px;color:#f6f2ff;font-family:Manrope,sans-serif;font-size:clamp(24px,4vw,36px);letter-spacing:-1px}
+.live-broadcast-message{margin:0;color:#e4dfef;font-size:clamp(14px,2vw,17px);line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}
+.live-broadcast-by{margin-top:28px;padding-top:18px;border-top:1px solid #343140;color:#a99bcf;font-size:10px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase}
+.broadcast-admin-form{display:grid;gap:10px;padding:16px}
+.broadcast-admin-form label{color:#a09eb0;font-size:9px;font-weight:800;letter-spacing:1.5px}
+.broadcast-admin-form input,.broadcast-admin-form textarea{width:100%;padding:13px 14px;border:1px solid #33313f;border-radius:12px;background:#181821;color:#f7f4ff;outline:none;font:inherit;font-size:12px}
+.broadcast-admin-form textarea{min-height:150px;resize:vertical;line-height:1.6}
+.broadcast-admin-form input:focus,.broadcast-admin-form textarea:focus{border-color:#8e7bda}
+.broadcast-active{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:0 16px 16px}
+.broadcast-active b{font-size:11px;color:#71dfb0}
+.broadcast-active p{flex:1;min-width:120px;margin:0;color:#aaa6ba;font-size:11px}
+@media(max-width:650px){.live-broadcast{padding:12px}.live-broadcast-card{border-radius:19px}.broadcast-active{align-items:flex-start;flex-direction:column}}
