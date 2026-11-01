@@ -531,14 +531,17 @@ app.post("/api/admin/users/:id/ban", requireAuth, requireAdmin, (req,res) => {
   res.json({ ok:true });
 });
 app.get("/api/events", requireAuth, (_req,res) => {
+  const recentCutoff = Date.now() - 12 * 60 * 60 * 1000;
   res.json({events:db.prepare(`SELECT e.id,e.title,e.description,e.location,e.starts_at AS startsAt,e.created_at AS createdAt,e.created_by AS createdBy,u.username AS host
-    FROM events e JOIN users u ON u.id=e.created_by WHERE e.cancelled=0 AND e.starts_at>=? ORDER BY e.starts_at ASC LIMIT 100`).all(Date.now())});
+    FROM events e JOIN users u ON u.id=e.created_by
+    WHERE e.cancelled=0 AND (e.starts_at>=? OR e.created_at>=?)
+    ORDER BY e.starts_at ASC LIMIT 100`).all(Date.now(), recentCutoff)});
 });
 app.post("/api/admin/events", requireAuth, requireAdmin, (req,res) => {
   const title=clean(req.body?.title,80), description=clean(req.body?.description,1000), location=clean(req.body?.location,120);
   const startsAt=Date.parse(String(req.body?.startsAt||""));
   if(title.length<3) return res.status(400).json({error:"Der Event-Titel muss mindestens 3 Zeichen haben."});
-  if(!Number.isFinite(startsAt)||startsAt<=Date.now()) return res.status(400).json({error:"Bitte wähle ein Datum in der Zukunft."});
+  if(!Number.isFinite(startsAt)) return res.status(400).json({error:"Bitte wähle ein gültiges Datum und eine Uhrzeit."});
   const eventId=id(), now=Date.now();
   db.prepare("INSERT INTO events(id,title,description,location,starts_at,created_by,created_at) VALUES(?,?,?,?,?,?,?)").run(eventId,title,description,location,startsAt,req.user.id,now);
   res.status(201).json({ok:true,id:eventId});
