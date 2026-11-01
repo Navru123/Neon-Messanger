@@ -539,6 +539,7 @@ $("adminContent").addEventListener("click",e=>{const b=e.target.closest("[data-r
 $("adminContent").addEventListener("submit",e=>{if(e.target.id==="liveBroadcastForm")publishLiveBroadcast(e);});
 $("liveBroadcastClose").addEventListener("click",hideLiveBroadcast);
 $("eventsList").addEventListener("click",e=>{const b=e.target.closest("[data-event-cancel]");if(b)adminAction(b);});
+$("eventStartNow").addEventListener("click",()=>{const now=new Date();now.setMinutes(now.getMinutes()-now.getTimezoneOffset());$("eventDate").value=now.toISOString().slice(0,16);});
 $("eventForm").addEventListener("submit",createEvent);
 window.addEventListener("resize",()=>{if(!state.activeConversation&&!$("welcomeView").classList.contains("hidden"))showView("chats");});
 
